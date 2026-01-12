@@ -1,0 +1,58 @@
+{
+  "name": "@beerui/dj-common",
+  "version": "1.0.0",
+  "description": "多端通用的公共方法库，支持 PC、H5、APP 等平台",
+  "type": "module",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.cjs.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./MessageSocket": {
+      "import": "./dist/MessageSocket.esm.js",
+      "require": "./dist/MessageSocket.cjs.js"
+    }
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "prepublishOnly": "npm run build",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "common",
+    "utils",
+    "websocket"
+  ],
+  "author": "BeerUi",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.23.9",
+    "@babel/preset-env": "^7.23.9",
+    "@commitlint/cli": "^20.3.1",
+    "@commitlint/config-conventional": "^20.3.1",
+    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.7.4",
+    "rollup": "^4.9.6",
+    "standard-version": "^9.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
