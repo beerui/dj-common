@@ -1,6 +1,6 @@
 ---
 name: release
-description: 自动化发布新版本到 npm
+description: 快速发布新版本到 npm
 triggers:
   - '发布新版本'
   - '发布版本'
@@ -8,158 +8,135 @@ triggers:
   - '发布'
   - 'publish'
   - 'npm publish'
+  - '发布 beta'
+  - 'release beta'
 ---
 
-# Release Skill
+# Release Skill - 快速发布流程
 
-自动化发布新版本到 npm。
+快速自动化发布新版本到 npm，优化了发布速度。
 
 ## 使用方法
 
-只需告诉 Claude：
+### 快速发布（推荐）
 
-- "发布新版本"
-- "帮我 release"
-- "发布到 npm"
+- "发布新版本" - 自动决定版本号并发布
+- "发布 patch 版本" - 发布补丁版本 (x.x.1)
+- "发布 minor 版本" - 发布次版本 (x.1.0)
+- "发布 major 版本" - 发布主版本 (1.0.0)
+- "发布 beta 版本 x.x.x" - 发布指定的 beta 版本
 
-## 执行流程
+### 带文档生成的发布
 
-1. **前置检查**
-   - 检查 git 状态（是否有未提交的更改）
-   - 检查当前分支（是否在 main 分支）
-   - 检查 npm 登录状态
+- "发布新版本并生成文档" - 发布前检查和生成缺失的 API 文档
 
-2. **文档检查和生成**
-   - 检查是否存在 `docs/` 文件夹
-   - 扫描 `src/` 目录下的所有模块文件（.ts, .js）
-   - 对每个公共模块，检查 `docs/` 目录是否有对应的 API 文档
-   - 如果缺少文档，自动生成包含以下内容的 Markdown 文档：
-     - 模块概述
-     - 导出的类/函数/接口列表
-     - 主要方法的参数和返回值说明
-     - 使用示例
-     - 相关类型定义
-   - 生成的文档应包含从源码中提取的 JSDoc/TSDoc 注释
-   - 将生成的文档保存到 `docs/api/` 目录
+## 执行流程（已优化）
 
-3. **代码检查和构建**
-   - 运行 ESLint 检查
-   - 运行构建命令
+### 快速模式（默认）
 
-4. **版本决策**
-   - 分析最近的 commit 历史
-   - 建议合适的版本类型（patch/minor/major/beta）
-   - 显示即将发布的 CHANGELOG 预览
+1. **智能检查**（并行执行）
+   - 检查 git 状态（未提交的更改会自动包含）
+   - 分析最近的 commit 决定版本号
+   - 预览 CHANGELOG 内容
 
-5. **用户确认**
-   - 展示版本信息
-   - 显示新生成的文档（如果有）
-   - 询问用户确认或选择其他版本类型
-
-6. **执行发布**
-   - 如果有新生成的文档，先提交文档更改
-   - 更新版本号
-   - 生成 CHANGELOG
+2. **自动执行**
+   - 更新 package.json 版本号
+   - 更新 CHANGELOG.md
+   - 提交更改
    - 创建 git tag
-   - 推送到远程仓库（包括文档）
-   - 触发 GitHub Actions 自动发布到 npm
+   - 推送到远程（触发 GitHub Actions 自动发布）
 
-7. **完成提示**
-   - 显示发布结果
-   - 提供 npm 包链接
-   - 提供 GitHub Release 链接
-   - 列出新生成或更新的文档
+3. **完成通知**
+   - 显示新版本号
+   - 提供 GitHub Release 链接（会自动创建）
 
-## 文档生成规则
+**耗时**：约 10-15 秒
+
+### 完整模式（带文档生成）
+
+在快速模式基础上增加：
+
+1. **文档检查**（仅在用户明确要求时）
+   - 扫描 `src/` 目录的公共模块
+   - 检查 `docs/api/` 是否有对应文档
+   - 仅为缺失的模块生成文档
+
+2. **文档提交**
+   - 如果生成了新文档，先提交文档
+   - 然后继续版本发布流程
+
+**耗时**：约 30-60 秒（取决于需要生成的文档数量）
+
+## 版本决策逻辑
+
+自动分析最近的 commits：
+
+- 包含 `BREAKING CHANGE` 或 `!`：major 版本
+- 包含 `feat:`：minor 版本
+- 包含 `fix:`：patch 版本
+- 包含 `beta` 关键字：beta 版本
+- 默认：patch 版本
+
+## 跳过的步骤（不再需要）
+
+以下检查已移除或简化，以提升速度：
+
+- ~~npm 登录检查~~（GitHub Actions 会处理）
+- ~~ESLint 检查~~（pre-commit hook 已处理）
+- ~~构建命令~~（GitHub Actions 会执行）
+- ~~用户确认~~（除非遇到冲突）
+
+## 文档生成规则（可选）
+
+仅在明确要求时才执行：
 
 ### 自动检测需要文档的模块
 
-- 扫描 `src/` 目录下所有导出的模块
-- 忽略以 `_` 开头的私有文件
-- 忽略测试文件（`*.test.ts`, `*.spec.ts`）
-- 忽略类型定义文件（`*.d.ts`）
+- 扫描 `src/` 目录（排除 `index.ts`、`*.test.ts`、`*.d.ts`）
+- 检查 `docs/api/` 是否有对应的 `.md` 文件
+- 仅为缺失的文档生成基础模板
 
-### 文档结构
+### 文档模板（简化版）
 
-生成的文档应包含：
-
-````markdown
-# ModuleName
-
-> 模块简介（从源文件顶部注释提取）
-
-## 安装
-
-```bash
-npm install @brewer/dj-common
-```
+```markdown
+# ModuleName API
 
 ## 导入
 
-```typescript
-import { ModuleName } from '@brewer/dj-common'
-// 或
-import ModuleName from '@brewer/dj-common/ModuleName'
+\`\`\`typescript
+import { ModuleName } from '@brewer/dj-common/ModuleName'
+\`\`\`
+
+## 接口定义
+
+// 从源码提取的主要接口
+
+## 使用示例
+
+// 基本使用示例
+
+## 配置选项
+
+// 配置参数说明
 ```
-
-## API
-
-### ClassName/FunctionName
-
-**描述**：功能描述
-
-**类型签名**：
-
-```typescript
-function functionName(param1: Type1, param2: Type2): ReturnType
-```
-
-**参数**：
-
-| 参数名 | 类型  | 必填 | 默认值 | 说明     |
-| ------ | ----- | ---- | ------ | -------- |
-| param1 | Type1 | 是   | -      | 参数说明 |
-| param2 | Type2 | 否   | null   | 参数说明 |
-
-**返回值**：
-
-返回值类型和说明
-
-**示例**：
-
-```typescript
-// 使用示例代码
-const result = functionName(arg1, arg2)
-```
-
-## 类型定义
-
-```typescript
-// 相关的 interface/type 定义
-interface ConfigType {
-  option1: string
-  option2: number
-}
-```
-
-## 相关链接
-
-- [GitHub 仓库](https://github.com/beerui/dj-common)
-- [NPM 包](https://www.npmjs.com/package/@brewer/dj-common)
-````
 
 ### 文档位置
 
-- 主文档：`docs/README.md`
 - API 文档：`docs/api/ModuleName.md`
-- 指南文档：`docs/guides/`
-- 更新日志：自动从 `CHANGELOG.md` 链接
+- 主文档在 `README.md`（不自动生成）
 
 ## 错误处理
 
-Skill 会自动处理常见错误：
+快速失败，清晰提示：
 
-- npm 未登录：提示登录
-- 构建失败：显示错误并停止
-- 推送失败：提供解决建议
-- 发布失败：诊断问题并给出建议
+- Git 冲突：显示冲突文件，建议解决方案
+- 推送失败：检查网络和权限
+- Tag 已存在：提示版本号重复
+
+## 性能优化
+
+- ✅ 并行执行独立检查
+- ✅ 跳过由 CI/CD 处理的步骤
+- ✅ 默认不生成文档（按需生成）
+- ✅ 减少用户交互
+- ✅ 利用 GitHub Actions 处理构建和发布

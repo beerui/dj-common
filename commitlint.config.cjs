@@ -19,5 +19,6 @@ module.exports = {
       ],
     ],
     'subject-case': [0], // 不限制主题大小写
+    'body-max-line-length': [0],
   },
 }
