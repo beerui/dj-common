@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.0-beta.2](https://github.com/beerui/dj-common/compare/v1.0.0-beta.1...v1.0.0-beta.2) (2026-01-13)
+
+### Documentation
+
+- 更新 MessageSocket 文档和示例
+- 添加 CLAUDE.md 为未来的 Claude Code 实例提供项目指导
+- 修改 MessageSocket中的baseUrl，ws 修改为 wss
+
 ## [1.0.0-beta.1](https://github.com/beerui/dj-common/compare/v1.0.0-beta.0...v1.0.0-beta.1) (2026-01-13)
 
 ### Changes
