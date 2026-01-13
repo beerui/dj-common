@@ -18,6 +18,13 @@ jobs:
         with:
           fetch-depth: 0 # 获取完整的 git 历史，用于生成 CHANGELOG
 
+      - name: 生成 CHANGELOG 草稿
+        run: |
+          {
+            printf "# Change Log\n\n"
+            git log --pretty=format:'* %h: %s' --no-merges
+          } > CHANGELOG.md
+
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
