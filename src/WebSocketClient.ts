@@ -62,7 +62,7 @@ export class WebSocketClient {
   protected reconnectTimer: number | null = null
 
   /** 消息回调列表 */
-  protected callbackList: MessageCallbackEntry[] = []
+  protected callbackList: MessageCallbackEntry<unknown>[] = []
 
   /** 当前连接的 URL */
   protected currentUrl: string | null = null
@@ -163,11 +163,7 @@ export class WebSocketClient {
    * 计划重连
    */
   protected scheduleReconnect(): void {
-    if (
-      this.reconnectAttempts >= this.config.maxReconnectAttempts ||
-      !this.currentUrl ||
-      this.manualClose
-    ) {
+    if (this.reconnectAttempts >= this.config.maxReconnectAttempts || !this.currentUrl || this.manualClose) {
       if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
         console.warn('[WebSocketClient] 已达到最大重连次数')
       }
@@ -175,10 +171,7 @@ export class WebSocketClient {
     }
 
     this.reconnectAttempts += 1
-    const delay = Math.min(
-      this.config.reconnectDelay * this.reconnectAttempts,
-      this.config.reconnectDelayMax
-    )
+    const delay = Math.min(this.config.reconnectDelay * this.reconnectAttempts, this.config.reconnectDelayMax)
 
     console.log(`[WebSocketClient] 将在 ${delay}ms 后进行第 ${this.reconnectAttempts} 次重连`)
 
@@ -232,7 +225,7 @@ export class WebSocketClient {
     let message: MessageData
     try {
       message = JSON.parse(data)
-    } catch (error) {
+    } catch {
       console.warn('[WebSocketClient] 无法解析消息', data)
       return
     }
@@ -291,10 +284,7 @@ export class WebSocketClient {
    */
   public on<T = unknown>(type: string, callback: MessageCallback<T>): void
   public on<T = unknown>(entry: MessageCallbackEntry<T>): void
-  public on<T = unknown>(
-    typeOrEntry: string | MessageCallbackEntry<T>,
-    callback?: MessageCallback<T>
-  ): void {
+  public on<T = unknown>(typeOrEntry: string | MessageCallbackEntry<T>, callback?: MessageCallback<T>): void {
     const entry: MessageCallbackEntry<T> =
       typeof typeOrEntry === 'string' ? { type: typeOrEntry, callback: callback! } : typeOrEntry
 
@@ -303,7 +293,7 @@ export class WebSocketClient {
       return
     }
 
-    this.callbackList.push(entry)
+    this.callbackList.push(entry as MessageCallbackEntry<unknown>)
   }
 
   /**
@@ -313,9 +303,7 @@ export class WebSocketClient {
    */
   public off<T = unknown>(type: string, callback?: MessageCallback<T>): void {
     if (callback) {
-      this.callbackList = this.callbackList.filter(
-        (entry) => !(entry.type === type && entry.callback === callback)
-      )
+      this.callbackList = this.callbackList.filter((entry) => !(entry.type === type && entry.callback === callback))
     } else {
       this.callbackList = this.callbackList.filter((entry) => entry.type !== type)
     }
@@ -372,5 +360,3 @@ export class WebSocketClient {
     // 子类可以重写
   }
 }
-
-export default WebSocketClient

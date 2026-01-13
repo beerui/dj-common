@@ -189,10 +189,7 @@ export class MessageSocket {
    * @param type 消息类型
    * @param callback 回调函数（可选）
    */
-  public static unregisterCallbacks<T = unknown>(
-    type: string,
-    callback?: (data: T, message?: unknown) => void
-  ): void {
+  public static unregisterCallbacks<T = unknown>(type: string, callback?: (data: T, message?: unknown) => void): void {
     if (!MessageSocket.client) {
       return
     }
@@ -241,5 +238,3 @@ export class MessageSocket {
     return MessageSocket.currentToken
   }
 }
-
-export default MessageSocket

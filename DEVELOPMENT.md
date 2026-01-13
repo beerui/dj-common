@@ -52,12 +52,14 @@ export default NewModule
 ```
 
 构建后会自动生成：
+
 - `dist/NewModule.esm.js`
 - `dist/NewModule.cjs.js`
 
 并且可以通过以下方式引入：
+
 ```javascript
-import NewModule from '@beerui/dj-common/NewModule'
+import NewModule from '@brewer/dj-common/NewModule'
 ```
 
 ### 4. 代码规范
@@ -89,6 +91,7 @@ npm run lint
 ```
 
 **类型 (type):**
+
 - `feat`: 新功能
 - `fix`: Bug 修复
 - `docs`: 文档更新
@@ -109,6 +112,7 @@ git commit -m "docs: 更新 README"
 ```
 
 **Git Hooks:**
+
 - `pre-commit`: 自动运行 lint-staged（代码检查和格式化）
 - `commit-msg`: 检查提交信息格式
 
@@ -119,6 +123,7 @@ npm run build
 ```
 
 构建过程会：
+
 1. 清理 `dist` 目录
 2. 自动扫描 `src` 目录下的所有模块
 3. 为每个模块生成 ESM 和 CommonJS 两种格式
@@ -133,6 +138,7 @@ bash scripts/release.sh
 ```
 
 脚本会引导你完成：
+
 1. 检查 git 状态
 2. 运行代码检查
 3. 选择版本类型
@@ -144,26 +150,31 @@ bash scripts/release.sh
 #### 方式二：手动发布
 
 **Patch 版本 (1.0.0 -> 1.0.1)**
+
 ```bash
 npm run release:patch
 ```
 
 **Minor 版本 (1.0.0 -> 1.1.0)**
+
 ```bash
 npm run release:minor
 ```
 
 **Major 版本 (1.0.0 -> 2.0.0)**
+
 ```bash
 npm run release:major
 ```
 
 **自定义版本**
+
 ```bash
 npm run release -- --release-as 2.0.0
 ```
 
 然后推送并发布：
+
 ```bash
 git push --follow-tags origin main
 npm publish
