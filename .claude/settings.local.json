@@ -17,7 +17,9 @@
       "Bash(npm whoami:*)",
       "Bash(git checkout:*)",
       "Bash(npm run lint)",
-      "Bash(npx standard-version --prerelease beta)"
+      "Bash(npx standard-version --prerelease beta)",
+      "Bash(npm publish:*)",
+      "Bash(npm view:*)"
     ]
   }
 }
