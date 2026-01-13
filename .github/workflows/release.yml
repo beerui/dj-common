@@ -35,7 +35,12 @@ jobs:
         run: npm run build
 
       - name: 发布到 NPM
-        run: npm publish
+        run: |
+          if [[ ${{ github.ref }} == refs/tags/*-beta.* ]]; then
+            npm publish --tag beta --access public
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
