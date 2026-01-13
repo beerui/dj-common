@@ -27,143 +27,79 @@ import MessageSocket from '@brewer/dj-common/MessageSocket'
 
 ## API
 
-### 构造函数
+基于 WebSocketClient 的用户消息管理类，适用于需要用户认证的场景（如获取用户未读消息数量）。
 
-```typescript
-constructor(config?: WebSocketConfig)
-```
-
-创建 MessageSocket 实例。
-
-**参数**：
-
-| 参数名 | 类型            | 必填 | 默认值 | 说明           |
-| ------ | --------------- | ---- | ------ | -------------- |
-| config | WebSocketConfig | 否   | {}     | WebSocket 配置 |
-
-**示例**：
-
-```typescript
-const socket = new MessageSocket({
-  url: 'ws://localhost:8080',
-  heartbeatInterval: 30000,
-  autoReconnect: true,
-})
-```
-
-### connect()
-
-```typescript
-connect(url?: string): void
-```
-
-连接到 WebSocket 服务器。
-
-**示例**：
-
-```typescript
-socket.connect('ws://localhost:8080')
-```
-
-### send()
-
-```typescript
-send(type: string, data?: unknown): void
-```
-
-发送消息。
-
-**示例**：
-
-```typescript
-socket.send('chat', { message: 'Hello' })
-```
-
-### on()
-
-```typescript
-on<T = unknown>(event: string, callback: MessageCallback<T>): void
-```
-
-注册消息监听器。
-
-**示例**：
-
-```typescript
-socket.on('message', (data) => {
-  console.log(data)
-})
-```
-
-### off()
-
-```typescript
-off(event: string, callback?: MessageCallback): void
-```
-
-移除消息监听器。
-
-**示例**：
-
-```typescript
-socket.off('message', handler)
-```
-
-### disconnect()
-
-```typescript
-disconnect(): void
-```
-
-断开连接。
-
-**示例**：
-
-```typescript
-socket.disconnect()
-```
-
-### destroy()
-
-```typescript
-destroy(): void
-```
-
-销毁实例。
-
-**示例**：
-
-```typescript
-socket.destroy()
-```
-
-## 完整示例
+#### 使用示例
 
 ```typescript
 import { MessageSocket } from '@brewer/dj-common'
 
-// 创建实例
-const socket = new MessageSocket({
+// 可选：自定义配置
+MessageSocket.configure({
+  baseUrl: 'ws://your-server.com',
+  path: '/your/path',
   heartbeatInterval: 30000,
-  autoReconnect: true,
 })
 
-// 注册消息处理
-socket.on('chat-message', (data) => {
-  console.log('收到聊天消息:', data)
+// 启动连接
+MessageSocket.start({
+  userId: '1234567890',
+  token: 'your-token',
+  callbacks: [
+    {
+      type: 'UNREAD_COUNT',
+      callback: (payload) => {
+        console.log('未读消息数:', payload)
+      },
+    },
+    {
+      type: 'NEW_MESSAGE',
+      callback: (payload) => {
+        console.log('新消息:', payload)
+      },
+    },
+  ],
 })
 
-// 连接
-socket.connect('ws://localhost:8080')
+// 动态注册回调
+MessageSocket.registerCallbacks({
+  type: 'NOTIFICATION',
+  callback: (payload) => {
+    console.log('通知:', payload)
+  },
+})
 
 // 发送消息
-socket.send('chat-message', {
-  content: 'Hello!',
-})
+MessageSocket.send({ type: 'MARK_READ', messageId: '123' })
 
-// 清理
-socket.destroy()
+// 停止连接
+MessageSocket.stop()
 ```
+
+#### API 说明
+
+##### 配置选项
+
+```typescript
+interface MessageSocketConfig extends WebSocketConfig {
+  baseUrl?: string // WebSocket 服务器基础地址，默认 'ws://dev-gateway.chinamarket.cn'
+  path?: string // WebSocket 路径，默认 '/api/user-web/websocket/messageServer'
+}
+```
+
+##### 方法
+
+- `configure(config): void` - 配置 MessageSocket
+- `start(options): void` - 启动连接
+- `stop(): void` - 停止连接
+- `registerCallbacks(entry): void` - 注册消息回调
+- `unregisterCallbacks(type, callback?): void` - 取消注册消息回调
+- `send(data): void` - 发送消息
+- `isConnected(): boolean` - 是否已连接
+- `getCurrentUserId(): string | null` - 获取当前用户ID
+- `getCurrentToken(): string | null` - 获取当前token
+
+---
 
 ## 相关链接
 

@@ -22,7 +22,9 @@
       "Bash(npm view:*)",
       "Bash(git push:*)",
       "Bash(ls:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(test:*)",
+      "Bash(npm pack:*)"
     ]
   }
 }

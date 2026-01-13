@@ -58,7 +58,7 @@ export interface MessageSocketStartOptions {
 export class MessageSocket {
   /** 默认配置 */
   private static readonly DEFAULT_CONFIG: MessageSocketConfig = {
-    baseUrl: 'ws://dev-gateway.chinamarket.cn',
+    baseUrl: 'wss://dev-gateway.chinamarket.cn',
     path: '/api/user-web/websocket/messageServer',
     heartbeatInterval: 25000,
     maxReconnectAttempts: 10,
