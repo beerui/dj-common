@@ -12,7 +12,8 @@
       "Bash(npx prettier:*)",
       "Bash(git reset:*)",
       "Bash(npm run release:dry-run:*)",
-      "Bash(npm token:*)"
+      "Bash(npm token:*)",
+      "Bash(node:*)"
     ]
   }
 }

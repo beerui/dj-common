@@ -7,7 +7,7 @@ import prettierConfig from 'eslint-config-prettier'
 export default [
   // 全局忽略文件
   {
-    ignores: ['node_modules/**', 'dist/**'],
+    ignores: ['node_modules/**', 'dist/**', 'examples/**'],
   },
 
   // JavaScript/TypeScript 通用配置
