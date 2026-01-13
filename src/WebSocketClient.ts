@@ -337,6 +337,7 @@ export class WebSocketClient {
    */
   protected onOpen(): void {
     // 子类可以重写
+    console.log('[WebSocketClient] 连接打开')
   }
 
   /**
@@ -344,6 +345,7 @@ export class WebSocketClient {
    */
   protected onClose(_event: CloseEvent): void {
     // 子类可以重写
+    console.log('[WebSocketClient] 连接打开')
   }
 
   /**
@@ -351,6 +353,7 @@ export class WebSocketClient {
    */
   protected onError(_event: Event): void {
     // 子类可以重写
+    console.log('[WebSocketClient] 连接错误', _event)
   }
 
   /**
@@ -358,5 +361,6 @@ export class WebSocketClient {
    */
   protected onMessage(_message: MessageData): void {
     // 子类可以重写
+    console.log('[WebSocketClient] 收到消息', _message)
   }
 }

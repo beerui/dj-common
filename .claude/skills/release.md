@@ -44,11 +44,13 @@ triggers:
    - 更新 CHANGELOG.md
    - 提交更改
    - 创建 git tag
-   - 推送到远程（触发 GitHub Actions 自动发布）
+   - 运行命令 `git push` 推送到远程
+   - 运行命令 `git push origin --tags 当前版本` 推送tag到远程（触发 GitHub Actions 自动发布）
 
 3. **完成通知**
    - 显示新版本号
    - 提供 GitHub Release 链接（会自动创建）
+   - 清除生成的 tmpclaude 临时文件
 
 **耗时**：约 10-15 秒
 
@@ -76,15 +78,6 @@ triggers:
 - 包含 `fix:`：patch 版本
 - 包含 `beta` 关键字：beta 版本
 - 默认：patch 版本
-
-## 跳过的步骤（不再需要）
-
-以下检查已移除或简化，以提升速度：
-
-- ~~npm 登录检查~~（GitHub Actions 会处理）
-- ~~ESLint 检查~~（pre-commit hook 已处理）
-- ~~构建命令~~（GitHub Actions 会执行）
-- ~~用户确认~~（除非遇到冲突）
 
 ## 文档生成规则（可选）
 
