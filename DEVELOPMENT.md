@@ -5,16 +5,19 @@
 ```
 dj-common/
 ├── src/                      # 源代码
-│   ├── index.js             # 主入口
-│   ├── MessageSocket.js     # WebSocket 消息管理
-│   ├── *.d.ts               # TypeScript 类型声明
-│   └── ...                  # 其他模块（自动扫描）
+│   ├── index.ts             # 主入口
+│   ├── WebSocketClient.ts   # WebSocket 客户端
+│   ├── MessageSocket.ts     # WebSocket 消息管理
+│   └── ...                  # 其他模块
 ├── dist/                     # 构建输出（自动生成）
-├── scripts/                  # 脚本文件
-│   └── release.sh           # 发布脚本
+├── .github/                  # GitHub Actions 配置
+│   └── workflows/
+│       ├── ci.yml           # CI 流程
+│       └── release.yml      # 发布流程
 ├── .husky/                   # Git hooks
-├── .eslintrc.cjs            # ESLint 配置
+├── eslint.config.js         # ESLint 配置 (Flat Config)
 ├── .prettierrc              # Prettier 配置
+├── .gitattributes           # Git 属性配置
 ├── commitlint.config.cjs    # Commit 规范配置
 ├── .versionrc.json          # 版本管理配置
 └── rollup.config.js         # 构建配置
@@ -131,23 +134,73 @@ npm run build
 
 ### 7. 版本发布
 
-#### 方式一：使用发布脚本（推荐）
+项目支持三种发布方式：
+
+#### 方式一：使用 Claude Code 自动发布（最简单）
+
+使用 Claude Code 可以帮助你自动完成整个发布流程：
+
+1. **确保已登录 npm**（仅首次需要）：
+
+   ```bash
+   npm login
+   ```
+
+2. **让 Claude 执行发布流程**：
+   只需告诉 Claude："请帮我发布一个新版本"，Claude 会自动：
+   - 检查代码状态
+   - 运行构建和检查
+   - 根据 commit 历史决定版本号
+   - 生成 CHANGELOG
+   - 创建 git tag
+   - 推送到远程仓库
+   - 发布到 npm
+
+3. **或者手动运行完整流程**：
+   ```bash
+   npm run release:all
+   ```
+
+#### 方式二：使用 GitHub Actions 自动发布（推荐生产环境）
+
+配置一次，之后每次发布只需要：
 
 ```bash
-bash scripts/release.sh
+# 1. 更新版本和 CHANGELOG（会自动提交）
+npm run release
+
+# 2. 推送 tag 到 GitHub（会自动触发发布）
+git push --follow-tags origin main
 ```
 
-脚本会引导你完成：
+GitHub Actions 会自动：
 
-1. 检查 git 状态
-2. 运行代码检查
-3. 选择版本类型
-4. 自动生成 CHANGELOG
-5. 创建 git tag
-6. 推送到远程仓库
-7. 发布到 npm
+- 运行 CI 检查
+- 构建项目
+- 发布到 npm
+- 创建 GitHub Release
 
-#### 方式二：手动发布
+**首次使用需要配置：**
+
+1. **获取 NPM Token**：
+
+   ```bash
+   npm login
+   npm token create --read-only=false
+   ```
+
+   复制生成的 token
+
+2. **在 GitHub 仓库中设置 Secret**：
+   - 进入仓库 Settings → Secrets and variables → Actions
+   - 点击 "New repository secret"
+   - Name: `NPM_TOKEN`
+   - Value: 粘贴上一步获取的 token
+   - 点击 "Add secret"
+
+3. **完成！** 之后每次推送 tag 都会自动发布
+
+#### 方式三：手动发布
 
 **Patch 版本 (1.0.0 -> 1.0.1)**
 
@@ -167,18 +220,76 @@ npm run release:minor
 npm run release:major
 ```
 
-**自定义版本**
+**自动决定版本（根据 commit 类型）**
 
 ```bash
-npm run release -- --release-as 2.0.0
+npm run release
+```
+
+**测试发布流程（不会实际修改文件）**
+
+```bash
+npm run release:dry-run
 ```
 
 然后推送并发布：
 
 ```bash
+npm run release:publish
+```
+
+或者分步执行：
+
+```bash
 git push --follow-tags origin main
 npm publish
 ```
+
+#### NPM 脚本说明
+
+| 脚本命令                  | 说明                               |
+| ------------------------- | ---------------------------------- |
+| `npm run build`           | 构建项目                           |
+| `npm run lint`            | 代码检查                           |
+| `npm run lint:fix`        | 自动修复代码问题                   |
+| `npm run format`          | 格式化代码                         |
+| `npm run release`         | 自动决定版本号并生成 CHANGELOG     |
+| `npm run release:patch`   | 发布 patch 版本 (x.x.1)            |
+| `npm run release:minor`   | 发布 minor 版本 (x.1.0)            |
+| `npm run release:major`   | 发布 major 版本 (1.0.0)            |
+| `npm run release:dry-run` | 模拟发布流程（不修改文件）         |
+| `npm run release:publish` | 推送 tag 并发布到 npm              |
+| `npm run release:all`     | 一键完成构建、版本更新、推送和发布 |
+
+#### 使用 Claude Code 的好处
+
+1. **智能决策**：Claude 可以分析你的 commit 历史，建议合适的版本号
+2. **错误处理**：遇到问题时自动处理或提供解决方案
+3. **一次性完成**：只需一个命令即可完成所有步骤
+4. **交互式确认**：在关键步骤（如发布前）会征求你的确认
+5. **自动修复**：发现代码问题时自动修复
+
+#### CI/CD 流程
+
+项目配置了两个 GitHub Actions workflow：
+
+**1. CI Workflow** (`.github/workflows/ci.yml`)
+
+- 触发时机：每次 push 到 main 分支或创建 PR
+- 执行内容：
+  - 在 Node.js 18.x, 20.x, 22.x 上运行测试
+  - 执行 ESLint 检查
+  - 构建项目
+  - 上传构建产物
+
+**2. Release Workflow** (`.github/workflows/release.yml`)
+
+- 触发时机：推送 v 开头的 tag（如 v1.0.0）
+- 执行内容：
+  - 运行 ESLint 检查
+  - 构建项目
+  - 发布到 NPM
+  - 创建 GitHub Release
 
 ## 版本管理
 
