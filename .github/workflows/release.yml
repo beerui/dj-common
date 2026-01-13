@@ -25,6 +25,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
+      - name: 指定 npm registry 为官方源
+        run: npm config set registry https://registry.npmjs.org
+
       - name: 安装依赖
         run: npm install
 
