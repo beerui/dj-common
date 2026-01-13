@@ -21,7 +21,8 @@
       "Bash(npm publish:*)",
       "Bash(npm view:*)",
       "Bash(git push:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git tag:*)"
     ]
   }
 }
