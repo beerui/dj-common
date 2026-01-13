@@ -19,7 +19,9 @@
       "Bash(npm run lint)",
       "Bash(npx standard-version --prerelease beta)",
       "Bash(npm publish:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(git push:*)",
+      "Bash(ls:*)"
     ]
   }
 }
