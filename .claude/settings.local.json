@@ -13,7 +13,11 @@
       "Bash(git reset:*)",
       "Bash(npm run release:dry-run:*)",
       "Bash(npm token:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm whoami:*)",
+      "Bash(git checkout:*)",
+      "Bash(npm run lint)",
+      "Bash(npx standard-version --prerelease beta)"
     ]
   }
 }
