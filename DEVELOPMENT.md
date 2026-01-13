@@ -182,14 +182,26 @@ GitHub Actions 会自动：
 
 **首次使用需要配置：**
 
-1. **获取 NPM Token**：
+1. **创建 NPM Granular Access Token**：
 
-   ```bash
-   npm login
-   npm token create --read-only=false
+   由于 NPM 现在使用 Granular Access Tokens，建议通过网页创建：
+
+   a. 访问 NPM Token 管理页面：
+
+   ```
+   https://www.npmjs.com/settings/YOUR_USERNAME/tokens
    ```
 
-   复制生成的 token
+   b. 点击 "Generate New Token" → "Granular Access Token"
+
+   c. 配置 Token：
+   - **Token Name**: `dj-common-github-actions`
+   - **Expiration**: 90 days（最长有效期）
+   - **Packages and scopes**: 选择 "Select packages and scopes"
+   - 搜索并添加你的包（如 `@brewer/dj-common`）
+   - **Permissions**: 选择 "Read and write"
+
+   d. 点击 "Generate Token" 并**立即复制** token（只显示一次）
 
 2. **在 GitHub 仓库中设置 Secret**：
    - 进入仓库 Settings → Secrets and variables → Actions

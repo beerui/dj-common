@@ -11,7 +11,8 @@
       "Bash(npx lint-staged:*)",
       "Bash(npx prettier:*)",
       "Bash(git reset:*)",
-      "Bash(npm run release:dry-run:*)"
+      "Bash(npm run release:dry-run:*)",
+      "Bash(npm token:*)"
     ]
   }
 }

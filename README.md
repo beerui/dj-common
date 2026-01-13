@@ -221,6 +221,8 @@ npm run build
 
 ## 发布
 
+使用claude code时 只需发送 "帮我发布一个新版本" 即可
+
 ```bash
 # 自动版本管理和发布
 npm run release:patch  # 补丁版本 1.0.0 -> 1.0.1
