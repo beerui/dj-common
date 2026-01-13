@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.0-beta.3](https://github.com/beerui/dj-common/compare/v1.0.0-beta.2...v1.0.0-beta.3) (2026-01-13)
+
+### Documentation
+
+- 优化发布技能文档，加快 npm 发布流程
+
 ## [1.0.0-beta.2](https://github.com/beerui/dj-common/compare/v1.0.0-beta.1...v1.0.0-beta.2) (2026-01-13)
 
 ### Documentation
