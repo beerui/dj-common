@@ -20,9 +20,18 @@
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.{ts,js}\"",
     "prepublishOnly": "npm run build",
     "prepare": "husky",
-    "publish": "standard-version"
+    "release": "standard-version",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major",
+    "release:patch": "standard-version --release-as patch",
+    "release:dry-run": "standard-version --dry-run",
+    "release:publish": "git push --follow-tags origin main && npm publish",
+    "release:all": "npm run build && npm run release && npm run release:publish"
   },
   "keywords": [
     "common",

@@ -24,3 +24,7 @@ Thumbs.db
 # 临时文件
 *.tmp
 *.temp
+tmpclaude-*
+
+# Claude Code 本地配置
+.claude/settings.local.json
