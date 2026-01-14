@@ -171,7 +171,7 @@ export class MessageSocket {
     })
 
     if (MessageSocket.config.callbacks && MessageSocket.config.callbacks.length > 0) {
-      MessageSocket.setCallbacks(MessageSocket.config.callbacks)
+      MessageSocket.config.callbacks.forEach((entry) => MessageSocket.registerCallbacks(entry))
     }
 
     // 连接
