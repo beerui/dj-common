@@ -19,19 +19,77 @@ npm install @brewer/dj-common
 
 ### 基础使用
 
+#### WebSocketClient 基础示例
+
 ```typescript
 import { WebSocketClient } from '@brewer/dj-common'
 
 const client = new WebSocketClient({
+  url: 'ws://localhost:8080',
   heartbeatInterval: 30000,
   autoReconnect: true,
 })
 
-client.on('message', (data) => {
-  console.log('收到消息:', data)
+client.on({
+  type: 'message',
+  callback: (data) => {
+    console.log('收到消息:', data)
+  },
 })
 
-client.connect('ws://localhost:8080')
+client.connect()
+```
+
+#### MessageSocket 业务场景示例
+
+```typescript
+import { MessageSocket } from '@brewer/dj-common'
+
+// 1. 配置服务器地址
+MessageSocket.setConfig({
+  baseUrl: 'ws://your-server.com',
+  path: '/api/websocket/messageServer',
+  heartbeatInterval: 25000,
+})
+
+// 2. 注册消息回调
+MessageSocket.setCallbacks([
+  {
+    type: 'UNREAD_COUNT',
+    callback: (payload) => {
+      console.log('未读消息数:', payload)
+    },
+  },
+  {
+    type: 'NEW_MESSAGE',
+    callback: (payload) => {
+      console.log('新消息:', payload)
+    },
+  },
+])
+
+// 3. 启动连接
+MessageSocket.start({
+  userId: '1234567890',
+  token: 'your-auth-token',
+})
+
+// 4. 动态注册新的回调
+MessageSocket.registerCallbacks({
+  type: 'NOTIFICATION',
+  callback: (payload) => {
+    console.log('通知:', payload)
+  },
+})
+
+// 5. 发送消息
+MessageSocket.send({
+  type: 'MARK_READ',
+  messageId: '123',
+})
+
+// 6. 停止连接
+MessageSocket.stop()
 ```
 
 ### 类型安全

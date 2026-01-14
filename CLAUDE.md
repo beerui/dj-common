@@ -161,4 +161,4 @@ npm link @brewer/dj-common
 - 所有控制台日志都带有 `[WebSocketClient]` 或 `[MessageSocket]` 前缀
 - 心跳消息默认格式：`{ type: 'PING', timestamp: Date.now() }`
 - MessageSocket 使用静态方法，保持全局单例模式
-- 当添加新功能时，考虑是应该在 WebSocketClient 还是 MessageSocket 层实现
+- 对话结束的时候，清除生成的临时无用文件 以tmpclaude-开头的
