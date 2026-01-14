@@ -23,19 +23,17 @@ description: 快速发布 beta 版本(尾部版本号+1)
    - git add package.json
    - git commit -m "chore: bump version to x.x.x-beta.x"
 
-5. **创建并推送 tag**
-   - 创建 git tag vx.x.x-beta.x
-   - 推送代码到 main 分支
-   - 推送 tag 到远端
+5. **推送到远端发布**
+   - 提交PR合并到main分支或直接推送代码到 main 分支结束流程
 
 ## 自动发布
 
 **无需手动执行 npm publish！**
 
-推送 tag 后，GitHub Actions 会自动：
+推送后，GitHub Actions 会自动：
 
-- 检测到新的 tag
 - 运行构建流程
+- 生成 tag
 - 发布到 npm registry
 
 ## 使用示例
@@ -45,7 +43,7 @@ description: 快速发布 beta 版本(尾部版本号+1)
 - "beta" 或 "/beta"
 - "发布 beta 版本"
 
-系统会自动完成所有操作，从版本号更新到推送 tag。
+系统会自动完成所有操作。
 
 ## 注意事项
 
