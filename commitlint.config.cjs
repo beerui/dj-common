@@ -24,5 +24,9 @@ module.exports = {
     'subject-max-length': [0],
     // 不限制body长度
     'body-max-length': [0],
+    // 不限制footer长度
+    'footer-max-line-length': [0],
+    // 不限制header长度
+    'header-max-length': [0],
   },
 }
