@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.0-beta.12](https://github.com/beerui/dj-common/compare/v1.0.0-beta.11...v1.0.0-beta.12) (2026-01-14)
+
+### Features
+
+- 添加页面可见性管理功能，支持多标签页场景下的连接优化
+- 新增 `enableVisibilityManagement` 配置选项
+- 标签页不可见时自动断开连接，可见时自动重连
+
+### Documentation
+
+- 更新 CLAUDE.md 架构说明
+- 更新 README.md 添加多标签页管理示例
+- 更新 MessageSocket API 文档
+
 ## [1.0.0-beta.3](https://github.com/beerui/dj-common/compare/v1.0.0-beta.2...v1.0.0-beta.3) (2026-01-13)
 
 ### Documentation
