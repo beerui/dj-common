@@ -8,6 +8,8 @@ export interface MessageSocketConfig extends WebSocketConfig {
   baseUrl?: string
   /** WebSocket 路径，默认 '/api/user-web/websocket/messageServer' */
   path?: string
+  /** 消息回调列表 */
+  callbacks?: MessageCallbackEntry[]
 }
 
 /**
@@ -18,8 +20,6 @@ export interface MessageSocketStartOptions {
   userId: string
   /** 认证令牌（必需） */
   token: string
-  /** 消息回调列表 */
-  callbacks?: MessageCallbackEntry[]
 }
 
 /**
@@ -33,19 +33,26 @@ export interface MessageSocketStartOptions {
  * MessageSocket.start({
  *   userId: '1234567890',
  *   token: 'your-token',
- *   callbacks: [
- *     {
- *       type: 'UNREAD_COUNT',
- *       callback: (payload) => {
- *         console.log('未读消息数:', payload)
- *       }
- *     }
- *   ]
  * })
  *
  * // 停止连接
  * MessageSocket.stop()
  *
+ * // 设置配置
+ * MessageSocket.setConfig({
+ *   baseUrl: 'ws://your-server.com',
+ *   path: '/your/path',
+ * })
+ *
+ * // 初始化时设置回调
+ * MessageSocket.setCallbacks([
+ *   {
+ *     type: 'UNREAD_COUNT',
+ *     callback: (payload) => {
+ *       console.log('未读消息数:', payload)
+ *     }
+ *   }
+ * ])
  * // 动态注册回调
  * MessageSocket.registerCallbacks({
  *   type: 'NEW_MESSAGE',
@@ -58,13 +65,14 @@ export interface MessageSocketStartOptions {
 export class MessageSocket {
   /** 默认配置 */
   private static readonly DEFAULT_CONFIG: MessageSocketConfig = {
-    baseUrl: 'wss://dev-gateway.chinamarket.cn',
-    path: '/api/user-web/websocket/messageServer',
+    baseUrl: '',
+    path: '',
     heartbeatInterval: 25000,
     maxReconnectAttempts: 10,
     reconnectDelay: 3000,
     reconnectDelayMax: 10000,
     autoReconnect: true,
+    callbacks: [],
   }
 
   /** WebSocket 客户端实例 */
@@ -88,11 +96,40 @@ export class MessageSocket {
   }
 
   /**
+   * 设置配置
+   * @param config 配置选项
+   * @returns MessageSocket
+   */
+  public static setConfig(config: Partial<MessageSocketConfig>): typeof MessageSocket {
+    MessageSocket.config = { ...MessageSocket.config, ...config }
+    if (MessageSocket.config.callbacks && MessageSocket.config.callbacks.length > 0) {
+      MessageSocket.setCallbacks(MessageSocket.config.callbacks)
+    }
+    return MessageSocket
+  }
+
+  /**
+   * 设置回调
+   * @param callbacks 回调列表
+   * @returns MessageSocket
+   */
+  public static setCallbacks(callbacks: MessageCallbackEntry[]): typeof MessageSocket {
+    callbacks.forEach((entry) => MessageSocket.registerCallbacks(entry))
+    return MessageSocket
+  }
+
+  /**
    * 启动连接
    * @param options 启动选项
+   * 回调在开始的时候注册，这种能
    */
   public static start(options: MessageSocketStartOptions): void {
-    const { userId, token, callbacks = [] } = options
+    if (!MessageSocket.config.baseUrl || !MessageSocket.config.path) {
+      console.warn('[MessageSocket] 缺少配置 baseUrl 或 path, 请先调用 setConfig 设置配置!')
+      return
+    }
+
+    const { userId, token } = options
 
     if (!userId || !token) {
       console.warn('[MessageSocket] 缺少 userId 或 token，无法启动')
@@ -108,8 +145,6 @@ export class MessageSocket {
 
     if (shouldReuse) {
       console.log('[MessageSocket] 复用现有连接')
-      // 重新注册回调
-      callbacks.forEach((entry) => MessageSocket.registerCallbacks(entry))
       return
     }
 
@@ -129,9 +164,6 @@ export class MessageSocket {
       ...clientConfig,
       url,
     })
-
-    // 注册回调
-    callbacks.forEach((entry) => MessageSocket.registerCallbacks(entry))
 
     // 连接
     MessageSocket.client.connect()

@@ -24,7 +24,9 @@
       "Bash(ls:*)",
       "Bash(git tag:*)",
       "Bash(test:*)",
-      "Bash(npm pack:*)"
+      "Bash(npm pack:*)",
+      "Bash(gh pr create:*)",
+      "Bash(git remote get-url:*)"
     ]
   }
 }
