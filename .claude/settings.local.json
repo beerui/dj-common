@@ -27,7 +27,8 @@
       "Bash(npm pack:*)",
       "Bash(gh pr create:*)",
       "Bash(git remote get-url:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(find:*)"
     ]
   }
 }

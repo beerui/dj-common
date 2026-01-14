@@ -1,11 +1,11 @@
 ---
 name: brewer
-description: 快速发布版本(尾部版本号+1)
+description: 快速发布 正式 版本(尾部版本号+1)
 ---
 
-# 快速发布
+# 正式 快速发布
 
-快速发布新版本，版本号尾部数字自动加 1。
+快速发布新的 正式 版本，版本号尾部数字自动加 1。
 
 ## 执行流程
 
@@ -15,16 +15,21 @@ description: 快速发布版本(尾部版本号+1)
 
 2. **更新版本号**
    - 更新 package.json 中的 version 字段
+3. **更新 CHANGELOG.md**
+   - 更新 CHANGELOG.md 中的 版本内容
 
-3. **构建项目**
+4. **构建项目**
    - 运行 `npm run build` 构建产物
 
-4. **提交更改**
-   - git add package.json
+5. **提交更改**
+   - git add 所有未提交项
    - git commit -m "chore: bump version to x.x.x"
 
-5. **推送到远端发布**
+6. **推送到远端发布**
    - 提交PR合并到main分支或直接推送代码到 main 分支结束流程
+
+7. **清理生成的无用文件**
+   - 删除tempclaude\*
 
 ## 自动发布
 
@@ -41,7 +46,7 @@ description: 快速发布版本(尾部版本号+1)
 只需说：
 
 - "brewer" 或 "/brewer"
-- "发布 稳定 版本"
+- "发布 正式 版本"
 
 系统会自动完成所有操作。
 
