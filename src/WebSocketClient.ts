@@ -1,14 +1,4 @@
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
-
-export const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
-  debug: 10,
-  info: 20,
-  warn: 30,
-  error: 40,
-  silent: 50,
-}
-
-type NonSilentLogLevel = Exclude<LogLevel, 'silent'>
+import { Logger, LogLevel } from './logger'
 
 /**
  * WebSocket 配置选项
@@ -90,41 +80,8 @@ export class WebSocketClient {
   /** 是否手动关闭 */
   protected manualClose = false
 
-  /**
-   * 是否应输出某个等级的日志
-   */
-  protected shouldLog(level: NonSilentLogLevel): boolean {
-    const currentLevel = this.config.logLevel ?? WebSocketClient.DEFAULT_CONFIG.logLevel
-    return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[currentLevel]
-  }
-
-  protected logDebug(...values: unknown[]): void {
-    if (!this.shouldLog('debug')) {
-      return
-    }
-    console.debug(...values)
-  }
-
-  protected logInfo(...values: unknown[]): void {
-    if (!this.shouldLog('info')) {
-      return
-    }
-    console.info(...values)
-  }
-
-  protected logWarn(...values: unknown[]): void {
-    if (!this.shouldLog('warn')) {
-      return
-    }
-    console.warn(...values)
-  }
-
-  protected logError(...values: unknown[]): void {
-    if (!this.shouldLog('error')) {
-      return
-    }
-    console.error(...values)
-  }
+  /** 日志器 */
+  protected readonly logger: Logger
 
   /**
    * 默认配置
@@ -149,6 +106,7 @@ export class WebSocketClient {
    */
   constructor(config: WebSocketConfig = {}) {
     this.config = { ...WebSocketClient.DEFAULT_CONFIG, ...config }
+    this.logger = new Logger('WebSocketClient', this.config.logLevel)
   }
 
   /**
@@ -157,6 +115,7 @@ export class WebSocketClient {
    */
   public updateConfig(config: Partial<WebSocketConfig>): void {
     this.config = { ...this.config, ...config }
+    this.logger.setLevel(this.config.logLevel ?? WebSocketClient.DEFAULT_CONFIG.logLevel)
   }
 
   /**
@@ -166,7 +125,7 @@ export class WebSocketClient {
   public connect(url?: string): void {
     const targetUrl = url || this.config.url
     if (!targetUrl) {
-      this.logError('[WebSocketClient] 缺少 WebSocket URL')
+      this.logger.error('[WebSocketClient] 缺少 WebSocket URL')
       return
     }
 
@@ -177,7 +136,7 @@ export class WebSocketClient {
       this.socket = new WebSocket(targetUrl)
 
       this.socket.onopen = () => {
-        this.logInfo('[WebSocketClient] 连接成功')
+        this.logger.info('[WebSocketClient] 连接成功')
         this.reconnectAttempts = 0
         this.startHeartbeat()
         this.onOpen()
@@ -188,7 +147,7 @@ export class WebSocketClient {
       }
 
       this.socket.onclose = (event: CloseEvent) => {
-        this.logInfo('[WebSocketClient] 连接关闭', event.code, event.reason)
+        this.logger.info('[WebSocketClient] 连接关闭', event.code, event.reason)
         this.stopHeartbeat()
         this.onClose(event)
 
@@ -198,12 +157,12 @@ export class WebSocketClient {
       }
 
       this.socket.onerror = (event: Event) => {
-        this.logError('[WebSocketClient] 连接错误', event)
+        this.logger.error('[WebSocketClient] 连接错误', event)
         this.stopHeartbeat()
         this.onError(event)
       }
     } catch (error) {
-      this.logError('[WebSocketClient] 连接失败', error)
+      this.logger.error('[WebSocketClient] 连接失败', error)
       if (this.config.autoReconnect && !this.manualClose) {
         this.scheduleReconnect()
       }
@@ -216,7 +175,7 @@ export class WebSocketClient {
   protected scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.config.maxReconnectAttempts || !this.currentUrl || this.manualClose) {
       if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
-        this.logWarn('[WebSocketClient] 已达到最大重连次数')
+        this.logger.warn('[WebSocketClient] 已达到最大重连次数')
       }
       return
     }
@@ -224,7 +183,7 @@ export class WebSocketClient {
     this.reconnectAttempts += 1
     const delay = Math.min(this.config.reconnectDelay * this.reconnectAttempts, this.config.reconnectDelayMax)
 
-    this.logDebug(`[WebSocketClient] 将在 ${delay}ms 后进行第 ${this.reconnectAttempts} 次重连`)
+    this.logger.debug(`[WebSocketClient] 将在 ${delay}ms 后进行第 ${this.reconnectAttempts} 次重连`)
 
     this.reconnectTimer = window.setTimeout(() => {
       this.connect(this.currentUrl!)
@@ -258,7 +217,7 @@ export class WebSocketClient {
    */
   public send(data: string | object): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      this.logWarn('[WebSocketClient] WebSocket 未连接，无法发送消息')
+      this.logger.warn('[WebSocketClient] WebSocket 未连接，无法发送消息')
       return
     }
 
@@ -277,7 +236,7 @@ export class WebSocketClient {
     try {
       message = JSON.parse(data)
     } catch {
-      this.logWarn('[WebSocketClient] 无法解析消息', data)
+      this.logger.warn('[WebSocketClient] 无法解析消息', data)
       return
     }
 
@@ -291,7 +250,7 @@ export class WebSocketClient {
       try {
         callback(message.data, message)
       } catch (error) {
-        this.logError('[WebSocketClient] 回调执行失败', error)
+        this.logger.error('[WebSocketClient] 回调执行失败', error)
       }
     })
 
@@ -340,7 +299,7 @@ export class WebSocketClient {
       typeof typeOrEntry === 'string' ? { type: typeOrEntry, callback: callback! } : typeOrEntry
 
     if (!entry.type || typeof entry.callback !== 'function') {
-      this.logWarn('[WebSocketClient] 无效的回调配置', entry)
+      this.logger.warn('[WebSocketClient] 无效的回调配置', entry)
       return
     }
 
@@ -388,7 +347,7 @@ export class WebSocketClient {
    */
   protected onOpen(): void {
     // 子类可以重写
-    this.logInfo('[WebSocketClient] 连接打开')
+    this.logger.info('[WebSocketClient] 连接打开')
   }
 
   /**
@@ -396,7 +355,7 @@ export class WebSocketClient {
    */
   protected onClose(_event: CloseEvent): void {
     // 子类可以重写
-    this.logInfo('[WebSocketClient] 连接打开')
+    this.logger.info('[WebSocketClient] 连接打开')
   }
 
   /**
@@ -404,7 +363,7 @@ export class WebSocketClient {
    */
   protected onError(_event: Event): void {
     // 子类可以重写
-    this.logError('[WebSocketClient] 连接错误', _event)
+    this.logger.error('[WebSocketClient] 连接错误', _event)
   }
 
   /**
@@ -412,6 +371,6 @@ export class WebSocketClient {
    */
   protected onMessage(_message: MessageData): void {
     // 子类可以重写
-    this.logDebug('[WebSocketClient] 收到消息', _message)
+    this.logger.debug('[WebSocketClient] 收到消息', _message)
   }
 }
