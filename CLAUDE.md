@@ -52,7 +52,8 @@ WebSocketClient (基础类)
 MessageSocket (业务类 - 静态单例)
     ├── 用户认证（userId + token）
     ├── URL 构建（baseUrl + path + 认证参数）
-    └── 全局消息管理
+    ├── 全局消息管理
+    └── 页面可见性管理（可选，用于多标签页场景）
 
 Logger (日志类)
     ├── 多级别日志（debug/info/warn/error/silent）
@@ -92,6 +93,23 @@ Logger (日志类)
   - MessageSocket: 通过 `setConfig` 的 `logLevel` 配置
 - **日志格式**：`[Name] ...messages`
 - **动态调整**：可以通过 `logger.setLevel()` 运行时修改日志级别
+
+### Visibility Management (页面可见性管理)
+
+MessageSocket 支持页面可见性管理功能，用于优化多标签页场景下的连接管理：
+
+- **启用方式**：通过 `setConfig` 的 `enableVisibilityManagement` 配置
+- **工作原理**：
+  - 监听浏览器的 `visibilitychange` 事件
+  - 当标签页不可见时自动断开连接
+  - 当标签页重新可见时自动重连
+- **使用场景**：
+  - 多标签页应用（避免重复连接）
+  - 移动端 WebView（页面切换到后台）
+  - 需要优化服务器连接数的场景
+- **注意事项**：
+  - 页面不可见时无法接收消息
+  - 如需后台持续接收消息，请勿启用此功能
 
 ## Build System
 

@@ -186,6 +186,38 @@ logger.error('错误信息')
 logger.setLevel('warn')
 ```
 
+## 多标签页管理
+
+在 Web 应用中，用户可能会在多个标签页打开同一个应用。为了避免多个标签页同时建立 WebSocket 连接造成资源浪费，可以启用页面可见性管理：
+
+```typescript
+import { MessageSocket } from '@brewer/dj-common'
+
+MessageSocket.setConfig({
+  url: 'ws://localhost:8080',
+  enableVisibilityManagement: true, // 启用页面可见性管理
+})
+
+MessageSocket.start({
+  userId: '123',
+  token: 'your-token',
+})
+```
+
+**功能说明：**
+
+- 当标签页切换到后台时，自动断开 WebSocket 连接
+- 当标签页切换到前台时，自动重新连接
+- 避免多个标签页同时维持连接，节省服务器资源
+- 用户始终能在当前活跃的标签页接收实时消息
+
+**适用场景：**
+
+- ✅ 用户可能打开多个标签页的应用
+- ✅ 需要优化服务器连接数的场景
+- ✅ 移动端 WebView 应用（页面切换到后台）
+- ❌ 需要在后台持续接收消息的场景
+
 ## 本地测试
 
 ```ts

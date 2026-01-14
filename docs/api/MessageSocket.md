@@ -36,7 +36,7 @@ import MessageSocket from '@brewer/dj-common/MessageSocket'
 ```typescript
 import { MessageSocket } from '@brewer/dj-common'
 
-// 1. 配置服务器地址（可选，如果使用默认配置可跳过）
+// 1. 配置服务器地址(可选,如果使用默认配置可跳过)
 MessageSocket.setConfig({
   baseUrl: 'ws://your-server.com', // 必填
   path: '/api/websocket/messageServer', // 必填
@@ -44,6 +44,7 @@ MessageSocket.setConfig({
   autoReconnect: true,
   maxReconnectAttempts: 10,
   logLevel: 'warn', // 日志级别（debug/info/warn/error/silent）
+  enableVisibilityManagement: true, // 启用页面可见性管理（推荐）
 })
 
 // 2. 注册消息回调（在启动前设置）
@@ -220,6 +221,8 @@ interface MessageSocketConfig extends WebSocketConfig {
   autoReconnect?: boolean
   /** 日志级别，默认 'warn' */
   logLevel?: 'debug' | 'info' | 'warn' | 'error' | 'silent'
+  /** 是否启用页面可见性管理（标签页切换时自动断开/重连），默认 false */
+  enableVisibilityManagement?: boolean
   /** 初始消息回调列表 */
   callbacks?: MessageCallbackEntry[]
 }
@@ -454,7 +457,40 @@ onUnmounted(() => {
 })
 ```
 
-### 5. 错误处理
+### 5. 多标签页管理（页面可见性）
+
+在 Web 应用中，用户可能会在多个标签页打开同一个应用。为了避免多个标签页同时建立 WebSocket 连接造成资源浪费和潜在的连接冲突，推荐启用页面可见性管理：
+
+```typescript
+MessageSocket.setConfig({
+  baseUrl: 'ws://server.com',
+  path: '/ws',
+  enableVisibilityManagement: true, // 启用页面可见性管理
+})
+
+MessageSocket.start({ userId, token })
+```
+
+**工作原理：**
+
+- 当标签页切换到后台（不可见）时，自动断开 WebSocket 连接
+- 当标签页切换到前台（可见）时，自动重新连接
+- 避免多个标签页同时维持连接，节省服务器资源
+- 用户始终能在当前活跃的标签页接收实时消息
+
+**推荐场景：**
+
+- 用户可能打开多个标签页的应用
+- 需要优化服务器连接数的场景
+- 移动端 WebView 应用（页面切换到后台）
+
+**注意事项：**
+
+- 当页面不可见时会断开连接，无法接收消息
+- 切换回可见时会自动重连，可能有短暂延迟
+- 如果需要在后台持续接收消息，请不要启用此功能
+
+### 6. 错误处理
 
 MessageSocket 内部会根据日志级别打印相应的日志信息：
 
@@ -481,7 +517,7 @@ MessageSocket.setConfig({
 })
 ```
 
-### 6. 类型安全
+### 7. 类型安全
 
 充分利用 TypeScript 的类型系统：
 
