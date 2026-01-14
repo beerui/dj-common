@@ -31,7 +31,8 @@
       "Bash(find:*)",
       "Skill(beta)",
       "Bash(git restore:*)",
-      "Bash(gh pr merge:*)"
+      "Bash(gh pr merge:*)",
+      "Bash(gh run list:*)"
     ]
   }
 }
