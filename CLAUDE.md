@@ -53,7 +53,14 @@ MessageSocket (业务类 - 静态单例)
     ├── 用户认证（userId + token）
     ├── URL 构建（baseUrl + path + 认证参数）
     ├── 全局消息管理
-    └── 页面可见性管理（可选，用于多标签页场景）
+    ├── 三种连接模式（sharedWorker / visibility / normal）
+    └── 自动降级策略
+         ↓ 使用
+    SharedWorkerManager (标签页端管理器)
+         ↓ MessagePort 通信
+    worker-script.ts (SharedWorker 脚本)
+         ↓ 管理单一连接
+    WebSocket Server
 
 Logger (日志类)
     ├── 多级别日志（debug/info/warn/error/silent）
@@ -64,7 +71,9 @@ Logger (日志类)
 **关键设计原则：**
 
 - `WebSocketClient` 是通用的、可复用的基础封装，不包含任何业务逻辑
-- `MessageSocket` 是针对特定业务场景（用户消息通知）的静态封装类
+- `MessageSocket` 是针对特定业务场景（用户消息通知）的静态封装类，支持三种连接模式
+- `SharedWorkerManager` 负责标签页端的 SharedWorker 连接管理和消息通信
+- `worker-script.ts` 在 SharedWorker 中运行，管理跨标签页共享的 WebSocket 连接
 - `Logger` 提供统一的日志管理系统，支持灵活的日志级别控制
 - 分层清晰，易于扩展新的业务场景类
 
@@ -94,22 +103,49 @@ Logger (日志类)
 - **日志格式**：`[Name] ...messages`
 - **动态调整**：可以通过 `logger.setLevel()` 运行时修改日志级别
 
-### Visibility Management (页面可见性管理)
+### Multi-Tab Connection Management (多标签页连接管理)
 
-MessageSocket 支持页面可见性管理功能，用于优化多标签页场景下的连接管理：
+MessageSocket 支持三种连接模式,用于优化多标签页场景下的连接管理：
 
-- **启用方式**：通过 `setConfig` 的 `enableVisibilityManagement` 配置
+#### 1. SharedWorker 模式（默认，推荐）
+
+- **启用方式**：`connectionMode: 'auto'`（默认）或 `'sharedWorker'`
+- **工作原理**：
+  - 使用 SharedWorker 在所有标签页之间共享一个 WebSocket 连接
+  - SharedWorkerManager 负责标签页端的管理
+  - worker-script.ts 在 Worker 中运行，维护唯一的 WebSocket 连接
+  - 通过 MessagePort 在标签页和 Worker 间通信
+- **空闲超时**：所有标签页都不可见时，等待 30 秒（可配置）才断开连接
+- **优势**：
+  - 所有标签页共享一个连接，节省资源
+  - 避免频繁断连，用户体验流畅
+  - 后台标签页可以接收消息
+- **浏览器支持**：Chrome, Firefox, Edge
+- **自动降级**：不支持时降级到 Visibility 模式
+
+#### 2. Visibility 模式（降级）
+
+- **启用方式**：`connectionMode: 'visibility'` + `enableVisibilityManagement: true`
 - **工作原理**：
   - 监听浏览器的 `visibilitychange` 事件
   - 当标签页不可见时自动断开连接
   - 当标签页重新可见时自动重连
 - **使用场景**：
-  - 多标签页应用（避免重复连接）
+  - SharedWorker 不可用时的降级方案
   - 移动端 WebView（页面切换到后台）
   - 需要优化服务器连接数的场景
 - **注意事项**：
   - 页面不可见时无法接收消息
-  - 如需后台持续接收消息，请勿启用此功能
+  - 切换标签页会导致短暂的断连/重连
+
+#### 3. Normal 模式（兜底）
+
+- **启用方式**：`connectionMode: 'normal'`
+- **工作原理**：每个标签页独立维持自己的 WebSocket 连接
+- **使用场景**：
+  - 不支持 SharedWorker 和 Visibility API 的浏览器
+  - 显式禁用多标签页优化的场景
+  - 需要在所有标签页后台接收消息的场景
 
 ## Build System
 
@@ -171,10 +207,13 @@ MessageSocket 支持页面可见性管理功能，用于优化多标签页场景
 ## Important Files
 
 - `src/WebSocketClient.ts` - WebSocket 基础封装类
-- `src/MessageSocket.ts` - 用户消息管理类
+- `src/MessageSocket.ts` - 用户消息管理类，支持三种连接模式
+- `src/SharedWorkerManager.ts` - SharedWorker 标签页端管理器
+- `src/worker-script.ts` - SharedWorker 脚本，管理跨标签页共享的 WebSocket 连接
+- `src/types.ts` - SharedWorker 相关的类型定义和消息协议
 - `src/logger.ts` - 日志系统（Logger 类，支持多级别日志）
 - `src/index.ts` - 主入口，导出所有公共 API
-- `rollup.config.js` - 构建配置，自动扫描模块
+- `rollup.config.js` - 构建配置，自动扫描模块，内联 Worker 代码
 - `.versionrc.json` - 版本管理配置（standard-version）
 - `commitlint.config.cjs` - Commit 规范配置
 - `DEVELOPMENT.md` - 详细的开发指南

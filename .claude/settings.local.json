@@ -32,7 +32,8 @@
       "Skill(beta)",
       "Bash(git restore:*)",
       "Bash(gh pr merge:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(npm run lint:fix:*)"
     ]
   }
 }
