@@ -2,8 +2,10 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*' # 当推送 v 开头的 tag 时触发，如 v1.0.0
+    # tags:
+    # - 'v*' # 当推送 v 开头的 tag 时触发，如 v1.0.0
+    branches:
+      - 'main' # 仅在 main 分支推送时触发
 
 jobs:
   publish:
