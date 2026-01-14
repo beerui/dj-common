@@ -114,7 +114,12 @@ export class MessageSocket {
    * @returns MessageSocket
    */
   public static setCallbacks(callbacks: MessageCallbackEntry[]): typeof MessageSocket {
-    callbacks.forEach((entry) => MessageSocket.registerCallbacks(entry))
+    if (!callbacks || callbacks.length === 0) {
+      console.warn('[MessageSocket] 回调列表为空，无法设置回调')
+      return MessageSocket
+    }
+
+    MessageSocket.config.callbacks = callbacks
     return MessageSocket
   }
 
@@ -164,6 +169,10 @@ export class MessageSocket {
       ...clientConfig,
       url,
     })
+
+    if (MessageSocket.config.callbacks && MessageSocket.config.callbacks.length > 0) {
+      MessageSocket.setCallbacks(MessageSocket.config.callbacks)
+    }
 
     // 连接
     MessageSocket.client.connect()

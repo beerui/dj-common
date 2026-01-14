@@ -20,5 +20,9 @@ module.exports = {
     ],
     'subject-case': [0], // 不限制主题大小写
     'body-max-line-length': [0],
+    // 不限制subject长度
+    'subject-max-length': [0],
+    // 不限制body长度
+    'body-max-length': [0],
   },
 }
