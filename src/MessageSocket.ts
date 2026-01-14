@@ -1,4 +1,6 @@
-import { WebSocketClient, WebSocketConfig, MessageCallbackEntry } from './WebSocketClient'
+import { WebSocketClient, WebSocketConfig, MessageCallbackEntry, LogLevel, LOG_LEVEL_PRIORITY } from './WebSocketClient'
+
+type NonSilentLogLevel = Exclude<LogLevel, 'silent'>
 
 /**
  * MessageSocket 配置选项
@@ -10,6 +12,8 @@ export interface MessageSocketConfig extends WebSocketConfig {
   path?: string
   /** 消息回调列表 */
   callbacks?: MessageCallbackEntry[]
+  /** 日志级别 */
+  logLevel?: LogLevel
 }
 
 /**
@@ -73,10 +77,48 @@ export class MessageSocket {
     reconnectDelayMax: 10000,
     autoReconnect: true,
     callbacks: [],
+    logLevel: 'warn',
   }
 
   /** WebSocket 客户端实例 */
   private static client: WebSocketClient | null = null
+
+  private static readonly DEFAULT_LOG_LEVEL: LogLevel = 'warn'
+  private static shouldLog(level: NonSilentLogLevel): boolean {
+    const currentLevel = MessageSocket.config.logLevel ?? MessageSocket.DEFAULT_LOG_LEVEL
+    return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[currentLevel]
+  }
+  private static log(level: NonSilentLogLevel, ...values: unknown[]): void {
+    if (!MessageSocket.shouldLog(level)) {
+      return
+    }
+    switch (level) {
+      case 'debug':
+        console.debug(...values)
+        break
+      case 'info':
+        console.info(...values)
+        break
+      case 'warn':
+        console.warn(...values)
+        break
+      case 'error':
+        console.error(...values)
+        break
+    }
+  }
+  private static logDebug(...values: unknown[]): void {
+    MessageSocket.log('debug', ...values)
+  }
+  private static logInfo(...values: unknown[]): void {
+    MessageSocket.log('info', ...values)
+  }
+  private static logWarn(...values: unknown[]): void {
+    MessageSocket.log('warn', ...values)
+  }
+  private static logError(...values: unknown[]): void {
+    MessageSocket.log('error', ...values)
+  }
 
   /** 当前用户ID */
   private static currentUserId: string | null = null
@@ -115,7 +157,7 @@ export class MessageSocket {
    */
   public static setCallbacks(callbacks: MessageCallbackEntry[]): typeof MessageSocket {
     if (!callbacks || callbacks.length === 0) {
-      console.warn('[MessageSocket] 回调列表为空，无法设置回调')
+      MessageSocket.logWarn('[MessageSocket] 回调列表为空，无法设置回调')
       return MessageSocket
     }
 
@@ -130,16 +172,18 @@ export class MessageSocket {
    */
   public static start(options: MessageSocketStartOptions): void {
     if (!MessageSocket.config.baseUrl || !MessageSocket.config.path) {
-      console.warn('[MessageSocket] 缺少配置 baseUrl 或 path, 请先调用 setConfig 设置配置!')
+      MessageSocket.logError('[MessageSocket] 缺少配置 baseUrl 或 path, 请先调用 setConfig 设置配置!')
       return
     }
 
     const { userId, token } = options
 
     if (!userId || !token) {
-      console.warn('[MessageSocket] 缺少 userId 或 token，无法启动')
+      MessageSocket.logError('[MessageSocket] 缺少 userId 或 token，无法启动')
       return
     }
+
+    MessageSocket.logInfo('[MessageSocket] 开始连接', userId)
 
     // 检查是否可以复用现有连接
     const shouldReuse =
@@ -149,7 +193,7 @@ export class MessageSocket {
       MessageSocket.currentToken === token
 
     if (shouldReuse) {
-      console.log('[MessageSocket] 复用现有连接')
+      MessageSocket.logDebug('[MessageSocket] 复用现有连接')
       return
     }
 
@@ -198,27 +242,27 @@ export class MessageSocket {
    */
   public static registerCallbacks<T = unknown>(entry: MessageCallbackEntry<T>): void {
     if (!entry) {
-      console.warn('[MessageSocket] 注册回调失败，缺少 entry', entry)
+      MessageSocket.logWarn('[MessageSocket] 注册回调失败，缺少 entry', entry)
       return
     }
 
     if (typeof entry !== 'object') {
-      console.warn('[MessageSocket] 注册回调失败，entry 不是对象', entry)
+      MessageSocket.logWarn('[MessageSocket] 注册回调失败，entry 不是对象', entry)
       return
     }
 
     if (typeof entry.callback !== 'function') {
-      console.warn('[MessageSocket] 注册回调失败，callback 不是函数', entry)
+      MessageSocket.logWarn('[MessageSocket] 注册回调失败，callback 不是函数', entry)
       return
     }
 
     if (typeof entry.type !== 'string') {
-      console.warn('[MessageSocket] 注册回调失败，type 不是字符串', entry)
+      MessageSocket.logWarn('[MessageSocket] 注册回调失败，type 不是字符串', entry)
       return
     }
 
     if (!MessageSocket.client) {
-      console.warn('[MessageSocket] WebSocket 客户端未初始化，无法注册回调')
+      MessageSocket.logWarn('[MessageSocket] WebSocket 客户端未初始化，无法注册回调')
       return
     }
 
@@ -244,7 +288,7 @@ export class MessageSocket {
    */
   public static send(data: string | object): void {
     if (!MessageSocket.client) {
-      console.warn('[MessageSocket] WebSocket 客户端未初始化，无法发送消息')
+      MessageSocket.logWarn('[MessageSocket] WebSocket 客户端未初始化，无法发送消息')
       return
     }
 
