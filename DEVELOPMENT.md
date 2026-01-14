@@ -8,6 +8,7 @@ dj-common/
 │   ├── index.ts             # 主入口
 │   ├── WebSocketClient.ts   # WebSocket 客户端
 │   ├── MessageSocket.ts     # WebSocket 消息管理
+│   ├── logger.ts            # 日志系统
 │   └── ...                  # 其他模块
 ├── dist/                     # 构建输出（自动生成）
 ├── .github/                  # GitHub Actions 配置
@@ -42,11 +43,11 @@ npm run dev
 
 ### 3. 添加新模块
 
-只需在 `src/` 目录下创建新的 `.js` 文件，构建系统会自动检测并构建。
+只需在 `src/` 目录下创建新的 `.ts` 文件，构建系统会自动检测并构建。
 
-例如，创建 `src/NewModule.js`：
+例如，创建 `src/NewModule.ts`：
 
-```javascript
+```typescript
 class NewModule {
   // 你的代码
 }
@@ -58,12 +59,20 @@ export default NewModule
 
 - `dist/NewModule.esm.js`
 - `dist/NewModule.cjs.js`
+- `dist/NewModule.d.ts`
 
 并且可以通过以下方式引入：
 
-```javascript
+```typescript
 import NewModule from '@brewer/dj-common/NewModule'
 ```
+
+**注意事项：**
+
+- 所有模块应使用 TypeScript 编写（.ts 扩展名）
+- 使用 ESM 的 export/import 语法
+- 为公共 API 提供完整的类型定义
+- 在 `src/index.ts` 中导出新模块，以支持从主入口引入
 
 ### 4. 代码规范
 

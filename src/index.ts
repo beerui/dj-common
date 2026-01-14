@@ -8,3 +8,6 @@ export type { WebSocketConfig, MessageData, MessageCallback, MessageCallbackEntr
 
 export { MessageSocket } from './MessageSocket'
 export type { MessageSocketConfig, MessageSocketStartOptions } from './MessageSocket'
+
+export { Logger } from './logger'
+export type { LogLevel } from './logger'

@@ -43,6 +43,7 @@ MessageSocket.setConfig({
   heartbeatInterval: 25000,
   autoReconnect: true,
   maxReconnectAttempts: 10,
+  logLevel: 'warn', // 日志级别（debug/info/warn/error/silent）
 })
 
 // 2. 注册消息回调（在启动前设置）
@@ -217,6 +218,8 @@ interface MessageSocketConfig extends WebSocketConfig {
   reconnectDelayMax?: number
   /** 是否自动重连，默认 true */
   autoReconnect?: boolean
+  /** 日志级别，默认 'warn' */
+  logLevel?: 'debug' | 'info' | 'warn' | 'error' | 'silent'
   /** 初始消息回调列表 */
   callbacks?: MessageCallbackEntry[]
 }
@@ -453,13 +456,29 @@ onUnmounted(() => {
 
 ### 5. 错误处理
 
-MessageSocket 内部会打印警告日志，但不会抛出异常：
+MessageSocket 内部会根据日志级别打印相应的日志信息：
 
 ```typescript
-// 这些调用不会抛出异常，只会打印警告
-MessageSocket.start({ userId: '', token: '' }) // 警告: 缺少参数
-MessageSocket.send({}) // 未连接时警告
-MessageSocket.registerCallbacks({ type: '', callback: null }) // 警告: 参数无效
+// 开启详细日志（用于调试）
+MessageSocket.setConfig({
+  baseUrl: 'ws://server.com',
+  path: '/ws',
+  logLevel: 'debug', // 输出所有日志
+})
+
+// 生产环境（仅输出错误）
+MessageSocket.setConfig({
+  baseUrl: 'ws://server.com',
+  path: '/ws',
+  logLevel: 'error', // 仅输出错误日志
+})
+
+// 静默模式（不输出任何日志）
+MessageSocket.setConfig({
+  baseUrl: 'ws://server.com',
+  path: '/ws',
+  logLevel: 'silent', // 完全静默
+})
 ```
 
 ### 6. 类型安全

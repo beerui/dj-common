@@ -44,6 +44,7 @@ WebSocketClient (基础类)
     ├── 心跳检测（自动发送 PING）
     ├── 自动重连（指数退避策略）
     ├── 消息回调系统（type-based routing）
+    ├── 日志系统（可配置的日志级别）
     └── 生命周期钩子（onOpen/onClose/onError/onMessage）
          ↑
          │ 继承
@@ -52,12 +53,18 @@ MessageSocket (业务类 - 静态单例)
     ├── 用户认证（userId + token）
     ├── URL 构建（baseUrl + path + 认证参数）
     └── 全局消息管理
+
+Logger (日志类)
+    ├── 多级别日志（debug/info/warn/error/silent）
+    ├── 优先级控制（仅输出大于等于设定级别的日志）
+    └── 带名称前缀的日志输出
 ```
 
 **关键设计原则：**
 
 - `WebSocketClient` 是通用的、可复用的基础封装，不包含任何业务逻辑
 - `MessageSocket` 是针对特定业务场景（用户消息通知）的静态封装类
+- `Logger` 提供统一的日志管理系统，支持灵活的日志级别控制
 - 分层清晰，易于扩展新的业务场景类
 
 ### Message Flow
@@ -75,6 +82,16 @@ MessageSocket (业务类 - 静态单例)
 - 最大尝试次数：10 次（`maxReconnectAttempts`）
 - 策略：线性退避（delay \* attempts）而非指数退避
 - 手动断开时不会触发重连
+
+### Logging System
+
+- **日志级别**：debug (10) < info (20) < warn (30) < error (40) < silent (50)
+- **默认级别**：warn（仅输出警告和错误）
+- **配置方式**：
+  - WebSocketClient: 通过构造函数的 `logLevel` 配置
+  - MessageSocket: 通过 `setConfig` 的 `logLevel` 配置
+- **日志格式**：`[Name] ...messages`
+- **动态调整**：可以通过 `logger.setLevel()` 运行时修改日志级别
 
 ## Build System
 
@@ -137,6 +154,7 @@ MessageSocket (业务类 - 静态单例)
 
 - `src/WebSocketClient.ts` - WebSocket 基础封装类
 - `src/MessageSocket.ts` - 用户消息管理类
+- `src/logger.ts` - 日志系统（Logger 类，支持多级别日志）
 - `src/index.ts` - 主入口，导出所有公共 API
 - `rollup.config.js` - 构建配置，自动扫描模块
 - `.versionrc.json` - 版本管理配置（standard-version）
@@ -158,7 +176,8 @@ npm link @brewer/dj-common
 ## Notes
 
 - 这是一个纯工具库，不应包含业务逻辑
-- 所有控制台日志都带有 `[WebSocketClient]` 或 `[MessageSocket]` 前缀
+- 所有日志都通过 Logger 类输出，可通过 logLevel 配置控制输出级别
+- 日志前缀格式：`[WebSocketClient]` 或 `[MessageSocket]`
 - 心跳消息默认格式：`{ type: 'PING', timestamp: Date.now() }`
 - MessageSocket 使用静态方法，保持全局单例模式
 - 对话结束的时候，清除生成的临时无用文件 以tmpclaude-开头的
