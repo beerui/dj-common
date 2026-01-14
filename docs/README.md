@@ -15,6 +15,10 @@ npm install @brewer/dj-common
 - [WebSocketClient](./api/WebSocketClient.md) - 通用 WebSocket 客户端基类
 - [MessageSocket](./api/MessageSocket.md) - 业务层 WebSocket 封装
 
+### 工具类
+
+- [Logger](./api/Logger.md) - 轻量级日志管理类
+
 ## 使用指南
 
 ### 基础使用
@@ -102,6 +106,7 @@ import { WebSocketClient, WebSocketConfig, MessageData } from '@brewer/dj-common
 const config: WebSocketConfig = {
   heartbeatInterval: 30000,
   maxReconnectAttempts: 10,
+  logLevel: 'debug', // 配置日志级别
 }
 
 const client = new WebSocketClient(config)
@@ -120,6 +125,7 @@ client.on<{ content: string }>('message', (data) => {
 - 🔧 **可配置** - 灵活的配置选项
 - 🔄 **自动重连** - 智能重连机制
 - 💓 **心跳检测** - 保持连接活性
+- 📝 **日志系统** - 内置可配置的日志管理
 
 ## 相关链接
 

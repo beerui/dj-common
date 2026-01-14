@@ -24,6 +24,7 @@ import WebSocketClient from '@brewer/dj-common/WebSocketClient'
 - 💓 心跳检测机制
 - 🔄 自动重连（可配置重连策略）
 - 📨 消息收发和回调管理
+- 📝 可配置的日志系统
 - 🛡️ 连接状态追踪
 
 ## API
@@ -50,6 +51,7 @@ const client = new WebSocketClient({
   maxReconnectAttempts: 10, // 最多重连10次
   reconnectDelay: 3000, // 重连延迟3秒
   autoReconnect: true, // 启用自动重连
+  logLevel: 'warn', // 日志级别（debug/info/warn/error/silent）
 })
 ```
 
@@ -195,6 +197,8 @@ interface WebSocketConfig {
   heartbeatMessage?: () => string | object
   /** 是否自动重连，默认 true */
   autoReconnect?: boolean
+  /** 日志级别，默认 'warn' */
+  logLevel?: 'debug' | 'info' | 'warn' | 'error' | 'silent'
 }
 ```
 
@@ -234,6 +238,7 @@ const client = new WebSocketClient({
   maxReconnectAttempts: 5,
   reconnectDelay: 3000,
   autoReconnect: true,
+  logLevel: 'debug', // 开启详细日志
 })
 
 // 注册消息回调
@@ -319,6 +324,7 @@ gameClient.connect('ws://game.example.com')
 3. **消息格式**：服务器返回的消息需要包含 `type` 字段
 4. **心跳机制**：可以通过 `heartbeatMessage` 自定义心跳消息格式
 5. **重连策略**：可以通过配置调整重连次数和延迟
+6. **日志控制**：通过 `logLevel` 配置控制日志输出级别，生产环境建议设置为 `'warn'` 或 `'error'`
 
 ## 相关链接
 
