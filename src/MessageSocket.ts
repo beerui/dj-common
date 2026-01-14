@@ -11,6 +11,8 @@ export interface MessageSocketConfig extends WebSocketConfig {
   callbacks?: MessageCallbackEntry[]
   /** 日志级别 */
   logLevel?: LogLevel
+  /** 是否启用页面可见性管理（标签页切换时自动断开/重连），默认 false */
+  enableVisibilityManagement?: boolean
 }
 
 /**
@@ -80,6 +82,7 @@ export class MessageSocket {
       timestamp: Date.now(),
     }),
     logLevel: 'warn',
+    enableVisibilityManagement: false,
   }
 
   /** WebSocket 客户端实例 */
@@ -99,6 +102,65 @@ export class MessageSocket {
 
   /** 当前配置 */
   private static config: MessageSocketConfig = { ...MessageSocket.DEFAULT_CONFIG }
+
+  /** 是否已初始化页面可见性监听 */
+  private static visibilityListenerInitialized = false
+
+  /**
+   * 页面可见性变化处理器
+   * 当标签页不可见时断开连接，可见时重新连接
+   */
+  private static handleVisibilityChange = (): void => {
+    if (typeof document === 'undefined') return
+
+    const isVisible = !document.hidden
+
+    if (!isVisible) {
+      // 页面不可见时断开连接，避免多标签页重复连接
+      MessageSocket.logger.info('[MessageSocket] 页面不可见，断开连接')
+      if (MessageSocket.client) {
+        MessageSocket.client.disconnect()
+      }
+    } else {
+      // 页面可见时重新连接
+      if (MessageSocket.currentUserId && MessageSocket.currentToken) {
+        MessageSocket.logger.info('[MessageSocket] 页面可见，尝试重新连接')
+        // 检查是否已经有活跃连接
+        if (!MessageSocket.client || !MessageSocket.client.isConnected()) {
+          MessageSocket.start({
+            userId: MessageSocket.currentUserId,
+            token: MessageSocket.currentToken,
+          })
+        }
+      }
+    }
+  }
+
+  /**
+   * 初始化页面可见性监听
+   */
+  private static initVisibilityListener(): void {
+    if (typeof document === 'undefined' || MessageSocket.visibilityListenerInitialized) {
+      return
+    }
+
+    document.addEventListener('visibilitychange', MessageSocket.handleVisibilityChange)
+    MessageSocket.visibilityListenerInitialized = true
+    MessageSocket.logger.debug('[MessageSocket] 已初始化页面可见性监听')
+  }
+
+  /**
+   * 移除页面可见性监听
+   */
+  private static removeVisibilityListener(): void {
+    if (typeof document === 'undefined' || !MessageSocket.visibilityListenerInitialized) {
+      return
+    }
+
+    document.removeEventListener('visibilitychange', MessageSocket.handleVisibilityChange)
+    MessageSocket.visibilityListenerInitialized = false
+    MessageSocket.logger.debug('[MessageSocket] 已移除页面可见性监听')
+  }
 
   /**
    * 配置 MessageSocket
@@ -190,6 +252,11 @@ export class MessageSocket {
       MessageSocket.config.callbacks.forEach((entry) => MessageSocket.registerCallbacks(entry))
     }
 
+    // 初始化页面可见性监听（如果启用）
+    if (MessageSocket.config.enableVisibilityManagement) {
+      MessageSocket.initVisibilityListener()
+    }
+
     // 连接
     MessageSocket.client.connect()
   }
@@ -203,6 +270,9 @@ export class MessageSocket {
       MessageSocket.client.clearCallbacks()
       MessageSocket.client = null
     }
+
+    // 清理页面可见性监听
+    MessageSocket.removeVisibilityListener()
 
     MessageSocket.currentUserId = null
     MessageSocket.currentToken = null
