@@ -43,9 +43,7 @@ triggers:
    - 更新 package.json 版本号
    - 更新 CHANGELOG.md
    - 提交更改
-   - 创建 git tag
    - 运行命令 `git push` 推送到远程
-   - 运行命令 `git push origin --tags 当前版本` 推送tag到远程（触发 GitHub Actions 自动发布）
 
 3. **完成通知**
    - 显示新版本号
