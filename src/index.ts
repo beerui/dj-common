@@ -9,5 +9,27 @@ export type { WebSocketConfig, MessageData, MessageCallback, MessageCallbackEntr
 export { MessageSocket } from './MessageSocket'
 export type { MessageSocketConfig, MessageSocketStartOptions } from './MessageSocket'
 
+export { SharedWorkerManager } from './SharedWorkerManager'
+export type { SharedWorkerManagerConfig } from './SharedWorkerManager'
+
 export { Logger } from './logger'
 export type { LogLevel } from './logger'
+
+// 导出 SharedWorker 相关类型
+export type {
+  ConnectionMode,
+  TabToWorkerMessage,
+  WorkerToTabMessage,
+  TabToWorkerMessageType,
+  WorkerToTabMessageType,
+  InitPayload,
+  SendPayload,
+  VisibilityPayload,
+  RegisterCallbackPayload,
+  UnregisterCallbackPayload,
+  ServerMessagePayload,
+  ErrorPayload,
+  AuthConflictPayload,
+  TabInfo,
+  SharedWorkerConfig,
+} from './types'

@@ -1,5 +1,7 @@
-import { WebSocketClient, WebSocketConfig, MessageCallbackEntry } from './WebSocketClient'
+import { WebSocketClient, WebSocketConfig, MessageCallbackEntry, MessageCallback } from './WebSocketClient'
 import { Logger, LogLevel } from './logger'
+import { SharedWorkerManager } from './SharedWorkerManager'
+import type { ConnectionMode } from './types'
 
 /**
  * MessageSocket 配置选项
@@ -13,6 +15,10 @@ export interface MessageSocketConfig extends WebSocketConfig {
   logLevel?: LogLevel
   /** 是否启用页面可见性管理（标签页切换时自动断开/重连），默认 false */
   enableVisibilityManagement?: boolean
+  /** 连接模式，默认 'auto' */
+  connectionMode?: ConnectionMode
+  /** SharedWorker 空闲超时时间（毫秒），默认 30000 */
+  sharedWorkerIdleTimeout?: number
 }
 
 /**
@@ -83,10 +89,18 @@ export class MessageSocket {
     }),
     logLevel: 'warn',
     enableVisibilityManagement: false,
+    connectionMode: 'auto',
+    sharedWorkerIdleTimeout: 30000,
   }
 
   /** WebSocket 客户端实例 */
   private static client: WebSocketClient | null = null
+
+  /** SharedWorker 管理器实例 */
+  private static workerManager: SharedWorkerManager | null = null
+
+  /** 当前连接模式 */
+  private static currentMode: 'sharedWorker' | 'visibility' | 'normal' = 'normal'
 
   private static readonly logger = new Logger('MessageSocket', MessageSocket.DEFAULT_CONFIG.logLevel)
 
@@ -163,6 +177,68 @@ export class MessageSocket {
   }
 
   /**
+   * 检测 SharedWorker 支持
+   */
+  private static detectSharedWorkerSupport(): boolean {
+    return typeof SharedWorker !== 'undefined' && typeof Blob !== 'undefined'
+  }
+
+  /**
+   * 检测 Visibility API 支持
+   */
+  private static detectVisibilitySupport(): boolean {
+    return typeof document !== 'undefined' && typeof document.hidden !== 'undefined'
+  }
+
+  /**
+   * 决定连接模式
+   */
+  private static determineConnectionMode(): 'sharedWorker' | 'visibility' | 'normal' {
+    const mode = MessageSocket.config.connectionMode || 'auto'
+
+    if (mode === 'auto') {
+      // 自动选择最佳模式
+      if (this.detectSharedWorkerSupport()) {
+        MessageSocket.logger.info('[MessageSocket] 自动选择 SharedWorker 模式')
+        return 'sharedWorker'
+      }
+      if (this.detectVisibilitySupport() && MessageSocket.config.enableVisibilityManagement) {
+        MessageSocket.logger.info('[MessageSocket] 自动选择 Visibility 模式')
+        return 'visibility'
+      }
+      MessageSocket.logger.info('[MessageSocket] 自动选择 Normal 模式')
+      return 'normal'
+    }
+
+    if (mode === 'sharedWorker') {
+      if (this.detectSharedWorkerSupport()) {
+        MessageSocket.logger.info('[MessageSocket] 使用 SharedWorker 模式')
+        return 'sharedWorker'
+      }
+      // 降级
+      MessageSocket.logger.warn('[MessageSocket] 浏览器不支持 SharedWorker，降级到 Visibility 模式')
+      if (this.detectVisibilitySupport() && MessageSocket.config.enableVisibilityManagement) {
+        return 'visibility'
+      }
+      MessageSocket.logger.warn('[MessageSocket] 降级到 Normal 模式')
+      return 'normal'
+    }
+
+    if (mode === 'visibility') {
+      if (this.detectVisibilitySupport()) {
+        MessageSocket.logger.info('[MessageSocket] 使用 Visibility 模式')
+        return 'visibility'
+      }
+      MessageSocket.logger.warn('[MessageSocket] 浏览器不支持 Visibility API，降级到 Normal 模式')
+      return 'normal'
+    }
+
+    // normal 模式
+    MessageSocket.logger.info('[MessageSocket] 使用 Normal 模式')
+    return 'normal'
+  }
+
+  /**
    * 配置 MessageSocket
    * @param config 配置选项
    */
@@ -219,6 +295,77 @@ export class MessageSocket {
 
     this.logger.info('[MessageSocket] 开始连接', userId)
 
+    // 决定连接模式
+    MessageSocket.currentMode = MessageSocket.determineConnectionMode()
+
+    // 根据模式启动
+    if (MessageSocket.currentMode === 'sharedWorker') {
+      MessageSocket.startWithSharedWorker(options)
+    } else if (MessageSocket.currentMode === 'visibility') {
+      MessageSocket.startWithVisibility(options)
+    } else {
+      MessageSocket.startWithNormalMode(options)
+    }
+  }
+
+  /**
+   * 使用 SharedWorker 模式启动
+   */
+  private static async startWithSharedWorker(options: MessageSocketStartOptions): Promise<void> {
+    const { userId, token } = options
+
+    // 停止旧连接
+    MessageSocket.stop()
+
+    // 保存当前用户信息
+    MessageSocket.currentUserId = userId
+    MessageSocket.currentToken = token
+
+    // 创建 SharedWorker 管理器
+    MessageSocket.workerManager = new SharedWorkerManager({
+      url: MessageSocket.config.url!,
+      userId,
+      token,
+      isVisible: typeof document !== 'undefined' ? !document.hidden : true,
+      config: MessageSocket.config,
+      sharedWorkerIdleTimeout: MessageSocket.config.sharedWorkerIdleTimeout,
+      logLevel: MessageSocket.config.logLevel,
+    })
+
+    // 设置错误回调（降级）
+    MessageSocket.workerManager.onError((error) => {
+      MessageSocket.logger.warn('[MessageSocket] SharedWorker 失败，降级到 Visibility 模式', error)
+      MessageSocket.currentMode = 'visibility'
+      MessageSocket.workerManager = null
+      MessageSocket.startWithVisibility(options)
+    })
+
+    // 启动 Worker（必须先启动，创建 port 后才能注册回调）
+    const success = await MessageSocket.workerManager.start()
+
+    if (!success) {
+      // 降级
+      MessageSocket.logger.warn('[MessageSocket] SharedWorker 启动失败，降级到 Visibility 模式')
+      MessageSocket.currentMode = 'visibility'
+      MessageSocket.workerManager = null
+      MessageSocket.startWithVisibility(options)
+      return
+    }
+
+    // 注册已有的回调（必须在 start() 之后，此时 port 已创建）
+    if (MessageSocket.config.callbacks && MessageSocket.config.callbacks.length > 0) {
+      MessageSocket.config.callbacks.forEach((entry) => {
+        MessageSocket.workerManager!.registerCallback(entry)
+      })
+    }
+  }
+
+  /**
+   * 使用 Visibility 模式启动
+   */
+  private static startWithVisibility(options: MessageSocketStartOptions): void {
+    const { userId, token } = options
+
     // 检查是否可以复用现有连接
     const shouldReuse =
       MessageSocket.client &&
@@ -248,13 +395,56 @@ export class MessageSocket {
       url: targetUrl,
     })
 
+    // 注册回调（直接注册到 client，不经过 registerCallbacks）
     if (MessageSocket.config.callbacks && MessageSocket.config.callbacks.length > 0) {
-      MessageSocket.config.callbacks.forEach((entry) => MessageSocket.registerCallbacks(entry))
+      MessageSocket.config.callbacks.forEach((entry) => MessageSocket.client!.on(entry))
     }
 
-    // 初始化页面可见性监听（如果启用）
-    if (MessageSocket.config.enableVisibilityManagement) {
-      MessageSocket.initVisibilityListener()
+    // 初始化页面可见性监听
+    MessageSocket.initVisibilityListener()
+
+    // 连接
+    MessageSocket.client.connect()
+  }
+
+  /**
+   * 使用 Normal 模式启动
+   */
+  private static startWithNormalMode(options: MessageSocketStartOptions): void {
+    const { userId, token } = options
+
+    // 检查是否可以复用现有连接
+    const shouldReuse =
+      MessageSocket.client &&
+      MessageSocket.client.isConnected() &&
+      MessageSocket.currentUserId === userId &&
+      MessageSocket.currentToken === token
+
+    if (shouldReuse) {
+      this.logger.debug('[MessageSocket] 复用现有连接')
+      return
+    }
+
+    // 停止旧连接
+    MessageSocket.stop()
+
+    // 保存当前用户信息
+    MessageSocket.currentUserId = userId
+    MessageSocket.currentToken = token
+
+    // 构建 WebSocket URL
+    const { url, ...clientConfig } = MessageSocket.config
+    const targetUrl = `${url}/${userId}?token=${encodeURIComponent(token)}`
+
+    // 创建新的 WebSocket 客户端
+    MessageSocket.client = new WebSocketClient({
+      ...clientConfig,
+      url: targetUrl,
+    })
+
+    // 注册回调（直接注册到 client，不经过 registerCallbacks）
+    if (MessageSocket.config.callbacks && MessageSocket.config.callbacks.length > 0) {
+      MessageSocket.config.callbacks.forEach((entry) => MessageSocket.client!.on(entry))
     }
 
     // 连接
@@ -269,6 +459,11 @@ export class MessageSocket {
       MessageSocket.client.disconnect()
       MessageSocket.client.clearCallbacks()
       MessageSocket.client = null
+    }
+
+    if (MessageSocket.workerManager) {
+      MessageSocket.workerManager.stop()
+      MessageSocket.workerManager = null
     }
 
     // 清理页面可见性监听
@@ -303,12 +498,14 @@ export class MessageSocket {
       return
     }
 
-    if (!MessageSocket.client) {
-      this.logger.warn('[MessageSocket] WebSocket 客户端未初始化，无法注册回调')
-      return
+    // 根据当前模式注册回调
+    if (MessageSocket.currentMode === 'sharedWorker' && MessageSocket.workerManager) {
+      MessageSocket.workerManager.registerCallback(entry)
+    } else if (MessageSocket.client) {
+      MessageSocket.client.on(entry)
+    } else {
+      this.logger.warn('[MessageSocket] 无可用连接，无法注册回调')
     }
-
-    MessageSocket.client.on(entry)
   }
 
   /**
@@ -317,11 +514,12 @@ export class MessageSocket {
    * @param callback 回调函数（可选）
    */
   public static unregisterCallbacks<T = unknown>(type: string, callback?: (data: T, message?: unknown) => void): void {
-    if (!MessageSocket.client) {
-      return
+    // 根据当前模式取消注册
+    if (MessageSocket.currentMode === 'sharedWorker' && MessageSocket.workerManager) {
+      MessageSocket.workerManager.unregisterCallback(type, callback as MessageCallback)
+    } else if (MessageSocket.client) {
+      MessageSocket.client.off(type, callback)
     }
-
-    MessageSocket.client.off(type, callback)
   }
 
   /**
@@ -329,12 +527,14 @@ export class MessageSocket {
    * @param data 消息数据
    */
   public static send(data: string | object): void {
-    if (!MessageSocket.client) {
-      this.logger.warn('[MessageSocket] WebSocket 客户端未初始化，无法发送消息')
-      return
+    // 根据当前模式发送
+    if (MessageSocket.currentMode === 'sharedWorker' && MessageSocket.workerManager) {
+      MessageSocket.workerManager.send(data)
+    } else if (MessageSocket.client) {
+      MessageSocket.client.send(data)
+    } else {
+      this.logger.warn('[MessageSocket] 无可用连接，无法发送消息')
     }
-
-    MessageSocket.client.send(data)
   }
 
   /**
@@ -348,7 +548,17 @@ export class MessageSocket {
    * 是否已连接
    */
   public static isConnected(): boolean {
+    if (MessageSocket.currentMode === 'sharedWorker' && MessageSocket.workerManager) {
+      return MessageSocket.workerManager.isConnected()
+    }
     return MessageSocket.client?.isConnected() ?? false
+  }
+
+  /**
+   * 获取当前连接模式
+   */
+  public static getConnectionMode(): 'sharedWorker' | 'visibility' | 'normal' {
+    return MessageSocket.currentMode
   }
 
   /**
