@@ -28,7 +28,10 @@
       "Bash(gh pr create:*)",
       "Bash(git remote get-url:*)",
       "Bash(git pull:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Skill(beta)",
+      "Bash(git restore:*)",
+      "Bash(gh pr merge:*)"
     ]
   }
 }
