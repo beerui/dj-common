@@ -89,6 +89,9 @@ export class SharedWorkerManager {
   /** 是否已初始化卸载监听 */
   private unloadListenerInitialized = false
 
+  /** 是否已初始化网络状态监听 */
+  private networkListenerInitialized = false
+
   /**
    * 构造函数
    */
@@ -167,6 +170,9 @@ export class SharedWorkerManager {
       // 设置页面卸载监听（页面关闭/刷新时通知 Worker 及时移除 tab）
       this.setupUnloadListener()
 
+      // 设置网络状态监听（网络恢复时通知 Worker 重连）
+      this.setupNetworkListener()
+
       // 发送初始化消息（只发送可序列化的配置项）
       const serializableConfig = {
         heartbeatInterval: this.config.config.heartbeatInterval,
@@ -223,6 +229,9 @@ export class SharedWorkerManager {
     // 移除卸载监听
     this.removeUnloadListener()
 
+    // 移除网络状态监听
+    this.removeNetworkListener()
+
     // 清理引用（但延迟关闭 port，确保消息发送完成）
     this.port = null
     this.worker = null
@@ -265,6 +274,9 @@ export class SharedWorkerManager {
 
     // 移除卸载监听
     this.removeUnloadListener()
+
+    // 移除网络状态监听
+    this.removeNetworkListener()
 
     // 清理引用
     this.port = null
@@ -622,6 +634,52 @@ export class SharedWorkerManager {
     if (this.port) {
       this.sendToWorker('TAB_DISCONNECT' as TabToWorkerMessageType, {})
     }
+  }
+
+  // ========== 网络状态监听 ==========
+
+  /**
+   * 设置网络状态监听
+   */
+  private setupNetworkListener(): void {
+    if (typeof window === 'undefined' || this.networkListenerInitialized) return
+
+    window.addEventListener('online', this.handleOnline)
+    window.addEventListener('offline', this.handleOffline)
+    this.networkListenerInitialized = true
+    this.logger.debug('[SharedWorkerManager] 已设置网络状态监听')
+  }
+
+  /**
+   * 移除网络状态监听
+   */
+  private removeNetworkListener(): void {
+    if (typeof window === 'undefined' || !this.networkListenerInitialized) return
+
+    window.removeEventListener('online', this.handleOnline)
+    window.removeEventListener('offline', this.handleOffline)
+    this.networkListenerInitialized = false
+    this.logger.debug('[SharedWorkerManager] 已移除网络状态监听')
+  }
+
+  /**
+   * 网络恢复时的处理函数
+   */
+  private handleOnline = (): void => {
+    this.logger.info('[SharedWorkerManager] 网络已恢复，通知 Worker 重连')
+
+    // 通知 Worker 网络已恢复，应该重试连接
+    if (this.port) {
+      this.sendToWorker('TAB_NETWORK_ONLINE' as TabToWorkerMessageType, {})
+    }
+  }
+
+  /**
+   * 网络断开时的处理函数
+   */
+  private handleOffline = (): void => {
+    this.logger.info('[SharedWorkerManager] 网络已断开')
+    // Worker 会自动处理连接断开，这里只记录日志
   }
 
   /**
