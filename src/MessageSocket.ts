@@ -19,6 +19,8 @@ export interface MessageSocketConfig extends WebSocketConfig {
   connectionMode?: ConnectionMode
   /** SharedWorker 空闲超时时间（毫秒），默认 30000 */
   sharedWorkerIdleTimeout?: number
+  /** 启动时强制新建 SharedWorker（会生成新的 worker 会话名，并尝试关闭旧 worker），默认 false */
+  forceNewWorkerOnStart?: boolean
 }
 
 /**
@@ -76,21 +78,22 @@ export interface MessageSocketStartOptions {
 export class MessageSocket {
   /** 默认配置 */
   private static readonly DEFAULT_CONFIG: Required<MessageSocketConfig> = {
-    url: '',
-    heartbeatInterval: 25000,
-    maxReconnectAttempts: 10,
-    reconnectDelay: 3000,
-    reconnectDelayMax: 10000,
-    autoReconnect: true,
-    callbacks: [],
+    url: '', // WebSocket 服务器地址，默认 ''
+    heartbeatInterval: 25000, // 心跳间隔，默认 25 秒
+    maxReconnectAttempts: 10, // 最大重连次数，默认 10 次
+    reconnectDelay: 3000, // 重连延迟，默认 3 秒
+    reconnectDelayMax: 10000, // 最大重连延迟，默认 10 秒
+    autoReconnect: true, // 是否自动重连，默认 true
+    callbacks: [], // 初始消息回调列表，默认 []
     heartbeatMessage: () => ({
       type: 'PING',
-      timestamp: Date.now(),
+      timestamp: Date.now(), // 心跳消息，默认 { type: 'PING', timestamp: Date.now() }
     }),
-    logLevel: 'warn',
-    enableVisibilityManagement: false,
-    connectionMode: 'auto',
-    sharedWorkerIdleTimeout: 30000,
+    logLevel: 'warn', // 日志级别，默认 'warn'
+    enableVisibilityManagement: false, // 是否启用页面可见性管理，默认 false
+    connectionMode: 'auto', // 连接模式，默认 'auto'
+    sharedWorkerIdleTimeout: 30000, // SharedWorker 空闲超时时间，默认 30 秒
+    forceNewWorkerOnStart: false, // 启动时强制重置 Worker 状态，默认 false（仅在需要强制刷新连接参数时使用）
   }
 
   /** WebSocket 客户端实例 */
@@ -131,14 +134,14 @@ export class MessageSocket {
 
     if (!isVisible) {
       // 页面不可见时断开连接，避免多标签页重复连接
-      MessageSocket.logger.info('[MessageSocket] 页面不可见，断开连接')
+      MessageSocket.logger.info('[MessageSocket1111111111111111111111] 页面不可见，断开连接')
       if (MessageSocket.client) {
         MessageSocket.client.disconnect()
       }
     } else {
       // 页面可见时重新连接
       if (MessageSocket.currentUserId && MessageSocket.currentToken) {
-        MessageSocket.logger.info('[MessageSocket] 页面可见，尝试重新连接')
+        MessageSocket.logger.info('[MessageSocket1111111111111111111111] 页面可见，尝试重新连接')
         // 检查是否已经有活跃连接
         if (!MessageSocket.client || !MessageSocket.client.isConnected()) {
           MessageSocket.start({
@@ -330,6 +333,7 @@ export class MessageSocket {
       config: MessageSocket.config,
       sharedWorkerIdleTimeout: MessageSocket.config.sharedWorkerIdleTimeout,
       logLevel: MessageSocket.config.logLevel,
+      forceNewWorkerOnStart: MessageSocket.config.forceNewWorkerOnStart,
     })
 
     // 设置错误回调（降级）
@@ -455,6 +459,7 @@ export class MessageSocket {
    * 停止连接
    */
   public static stop(): void {
+    MessageSocket.logger.info('[MessageSocket] 停止连接')
     if (MessageSocket.client) {
       MessageSocket.client.disconnect()
       MessageSocket.client.clearCallbacks()

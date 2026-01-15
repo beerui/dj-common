@@ -33,7 +33,9 @@
       "Bash(git restore:*)",
       "Bash(gh pr merge:*)",
       "Bash(gh run list:*)",
-      "Bash(npm run lint:fix:*)"
+      "Bash(npm run lint:fix:*)",
+      "Bash(pnpm unlink:*)",
+      "Bash(pnpm link:*)"
     ]
   }
 }
