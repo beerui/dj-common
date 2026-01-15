@@ -1,6 +1,6 @@
 {
   "name": "@brewer/dj-common",
-  "version": "1.0.0-beta.14",
+  "version": "1.0.0-beta.15",
   "description": "多端通用的公共方法库，支持 PC、H5、APP 等平台",
   "type": "module",
   "main": "dist/index.cjs.js",

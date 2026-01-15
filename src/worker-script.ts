@@ -831,6 +831,37 @@ class WebSocketManager {
       }
     }
   }
+
+  /**
+   * 处理网络恢复事件
+   * 重置重连计数并立即尝试重连
+   */
+  handleNetworkOnline(): void {
+    console.log('[SharedWorker] 🌐 收到网络恢复通知')
+
+    // 如果已连接，无需重连
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      console.log('[SharedWorker] 已有活跃连接，无需重连')
+      return
+    }
+
+    // 重置重连计数
+    this.reconnectAttempts = 0
+
+    // 清除可能存在的重连定时器
+    this.clearReconnectTimer()
+
+    // 重置熔断状态
+    this.reconnectSuppressedUntil = 0
+
+    // 如果有可见标签页且有 URL，立即尝试重连
+    if (this.currentUrl && this.hasVisibleTab()) {
+      console.log('[SharedWorker] 网络恢复，立即尝试重连')
+      this.connect()
+    } else {
+      console.log('[SharedWorker] 网络恢复，但无可见标签页或无 URL，等待条件满足')
+    }
+  }
 }
 
 // 创建全局 WebSocket 管理器实例
@@ -890,6 +921,10 @@ const wsManager = new WebSocketManager()
 
       case 'TAB_FORCE_SHUTDOWN':
         wsManager.forceShutdown((message.payload as ForceShutdownPayload)?.reason)
+        break
+
+      case 'TAB_NETWORK_ONLINE':
+        wsManager.handleNetworkOnline()
         break
 
       default:

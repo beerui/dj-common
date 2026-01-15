@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.0-beta.15](https://github.com/beerui/dj-common/compare/v1.0.0-beta.14...v1.0.0-beta.15) (2026-01-15)
+
+### Features
+
+- 添加网络状态监听功能，解决移动端断网较久后无法自动重连的问题
+- WebSocketClient 新增 `enableNetworkListener` 配置项（默认 true）
+- 监听 `online`/`offline` 事件，网络恢复时自动重置重连计数并立即重连
+- SharedWorker 模式同步支持网络恢复自动重连
+
+### Bug Fixes
+
+- 修复断网超过重连次数上限后，网络恢复时无法自动重连的问题
+
 ## [1.0.0-beta.12](https://github.com/beerui/dj-common/compare/v1.0.0-beta.11...v1.0.0-beta.12) (2026-01-14)
 
 ### Features

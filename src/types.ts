@@ -27,6 +27,8 @@ export enum TabToWorkerMessageType {
   TAB_FORCE_SHUTDOWN = 'TAB_FORCE_SHUTDOWN',
   /** 强制重置 Worker 状态（断开 WebSocket 但不终止 Worker） */
   TAB_FORCE_RESET = 'TAB_FORCE_RESET',
+  /** 网络已恢复（通知 Worker 重试连接） */
+  TAB_NETWORK_ONLINE = 'TAB_NETWORK_ONLINE',
 }
 
 /**

@@ -20,6 +20,8 @@ export interface WebSocketConfig {
   autoReconnect?: boolean
   /** 日志输出等级 */
   logLevel?: LogLevel
+  /** 是否启用网络状态监听（网络恢复时自动重连），默认 true */
+  enableNetworkListener?: boolean
 }
 
 /**
@@ -80,6 +82,9 @@ export class WebSocketClient {
   /** 是否手动关闭 */
   protected manualClose = false
 
+  /** 是否已初始化网络监听 */
+  protected networkListenerInitialized = false
+
   /** 日志器 */
   protected readonly logger: Logger
 
@@ -98,6 +103,7 @@ export class WebSocketClient {
       timestamp: Date.now(),
     }),
     logLevel: 'warn',
+    enableNetworkListener: true,
   }
 
   /**
@@ -131,6 +137,9 @@ export class WebSocketClient {
 
     this.currentUrl = targetUrl
     this.manualClose = false
+
+    // 初始化网络状态监听
+    this.initNetworkListener()
 
     try {
       this.socket = new WebSocket(targetUrl)
@@ -196,6 +205,7 @@ export class WebSocketClient {
   public disconnect(): void {
     this.manualClose = true
     this.stopHeartbeat()
+    this.removeNetworkListener()
 
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
@@ -372,5 +382,84 @@ export class WebSocketClient {
   protected onMessage(_message: MessageData): void {
     // 子类可以重写
     this.logger.debug('[WebSocketClient] 收到消息', _message)
+  }
+
+  // ========== 网络状态监听 ==========
+
+  /**
+   * 网络恢复时的处理函数
+   */
+  protected handleOnline = (): void => {
+    this.logger.info('[WebSocketClient] 网络已恢复')
+
+    // 如果是手动关闭的，不自动重连
+    if (this.manualClose) {
+      return
+    }
+
+    // 如果已连接，无需重连
+    if (this.isConnected()) {
+      return
+    }
+
+    // 重置重连计数，立即重连
+    this.reconnectAttempts = 0
+
+    // 清除可能存在的重连定时器
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+
+    // 立即尝试重连
+    if (this.currentUrl && this.config.autoReconnect) {
+      this.logger.info('[WebSocketClient] 网络恢复，立即尝试重连')
+      this.connect(this.currentUrl)
+    }
+  }
+
+  /**
+   * 网络断开时的处理函数
+   */
+  protected handleOffline = (): void => {
+    this.logger.info('[WebSocketClient] 网络已断开')
+
+    // 清除重连定时器，避免在无网络时浪费重连尝试
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+  }
+
+  /**
+   * 初始化网络状态监听
+   */
+  protected initNetworkListener(): void {
+    if (typeof window === 'undefined' || this.networkListenerInitialized) {
+      return
+    }
+
+    if (!this.config.enableNetworkListener) {
+      return
+    }
+
+    window.addEventListener('online', this.handleOnline)
+    window.addEventListener('offline', this.handleOffline)
+    this.networkListenerInitialized = true
+    this.logger.debug('[WebSocketClient] 已初始化网络状态监听')
+  }
+
+  /**
+   * 移除网络状态监听
+   */
+  protected removeNetworkListener(): void {
+    if (typeof window === 'undefined' || !this.networkListenerInitialized) {
+      return
+    }
+
+    window.removeEventListener('online', this.handleOnline)
+    window.removeEventListener('offline', this.handleOffline)
+    this.networkListenerInitialized = false
+    this.logger.debug('[WebSocketClient] 已移除网络状态监听')
   }
 }

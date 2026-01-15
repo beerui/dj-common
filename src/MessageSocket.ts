@@ -94,6 +94,7 @@ export class MessageSocket {
     connectionMode: 'auto', // 连接模式，默认 'auto'
     sharedWorkerIdleTimeout: 30000, // SharedWorker 空闲超时时间，默认 30 秒
     forceNewWorkerOnStart: false, // 启动时强制重置 Worker 状态，默认 false（仅在需要强制刷新连接参数时使用）
+    enableNetworkListener: true, // 是否启用网络状态监听（网络恢复时自动重连），默认 true
   }
 
   /** WebSocket 客户端实例 */
