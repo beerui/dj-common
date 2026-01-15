@@ -39,6 +39,8 @@ interface TabInfo {
   port: MessagePort
   tabId: string
   isVisible: boolean
+  /** 最近一次收到该标签页心跳/消息的时间戳 */
+  lastSeen: number
   registeredTypes: Set<string>
   callbackMap: Map<string, string>
 }
@@ -57,6 +59,10 @@ interface InitPayload {
     logLevel?: string
   }
   sharedWorkerIdleTimeout?: number
+}
+
+interface ForceShutdownPayload {
+  reason?: string
 }
 
 interface SendPayload {
@@ -111,6 +117,12 @@ class WebSocketManager {
   /** WebSocket 连接实例 */
   private socket: WebSocket | null = null
 
+  /** 最近一次服务器消息缓存（按 type） */
+  private lastMessageByType: Map<string, ServerMessagePayload> = new Map()
+
+  /** 标签页清理定时器（回收已关闭/崩溃的标签页） */
+  private tabCleanupTimer: ReturnType<typeof setInterval> | null = null
+
   /** 空闲定时器 */
   private idleTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -132,11 +144,76 @@ class WebSocketManager {
   /** 当前用户ID */
   private currentUserId: string | null = null
 
+  /** 当前 token（用于判断登录态变化） */
+  private currentToken: string | null = null
+
+  /** 当前 baseUrl（用于判断环境/域名变化） */
+  private currentBaseUrl: string | null = null
+
+  /** 上次连接打开时间 */
+  private lastOpenAt = 0
+
+  /** 连续快速被服务端正常关闭(1000)次数 */
+  private fastClose1000Count = 0
+
+  /** 自动重连熔断到期时间戳（ms） */
+  private reconnectSuppressedUntil = 0
+
   /** 配置 */
   private config: InitPayload['config'] | null = null
 
   /** SharedWorker 空闲超时时间（毫秒） */
   private sharedWorkerIdleTimeout = 30000
+
+  /** tab 超时时间（毫秒）：超过该时间未心跳则认为已关闭 */
+  private tabStaleTimeout = 45000
+
+  /**
+   * 是否存在可见标签页
+   */
+  private hasVisibleTab(): boolean {
+    return Array.from(this.tabs.values()).some((tab) => tab.isVisible)
+  }
+
+  /**
+   * 清理重连定时器
+   */
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+  }
+
+  /**
+   * 启动 tab 清理（兜底：页面强制关闭/崩溃未发送 TAB_DISCONNECT 时也能回收）
+   */
+  private startTabCleanup(): void {
+    if (this.tabCleanupTimer !== null) return
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.tabCleanupTimer = (globalThis as any).setInterval(() => {
+      const now = Date.now()
+      const staleTabIds: string[] = []
+      for (const tab of this.tabs.values()) {
+        if (now - tab.lastSeen > this.tabStaleTimeout) {
+          staleTabIds.push(tab.tabId)
+        }
+      }
+
+      if (staleTabIds.length > 0) {
+        console.warn('[SharedWorker] 检测到过期标签页，将清理:', staleTabIds)
+        staleTabIds.forEach((id) => this.removeTab(id))
+      }
+    }, 15000)
+  }
+
+  private stopTabCleanup(): void {
+    if (this.tabCleanupTimer !== null) {
+      clearInterval(this.tabCleanupTimer)
+      this.tabCleanupTimer = null
+    }
+  }
 
   /**
    * 添加标签页
@@ -162,28 +239,78 @@ class WebSocketManager {
       port,
       tabId,
       isVisible: initPayload.isVisible,
+      lastSeen: Date.now(),
       registeredTypes: new Set(),
       callbackMap: new Map(),
     }
 
     this.tabs.set(tabId, tabInfo)
     console.log(`[SharedWorker] 标签页已添加: ${tabId}, 当前标签页数量: ${this.tabs.size}`)
+    this.startTabCleanup()
 
-    // 如果还没有连接，创建连接
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      this.currentUrl = `${initPayload.url}/${initPayload.userId}?token=${encodeURIComponent(initPayload.token)}`
-      this.currentUserId = initPayload.userId
+    // 计算本次期望连接参数（允许登录后 token 更新 / 切换账号）
+    const nextBaseUrl = initPayload.url
+    const nextUserId = initPayload.userId
+    const nextToken = initPayload.token
+    const nextUrl = `${nextBaseUrl}/${nextUserId}?token=${encodeURIComponent(nextToken)}`
+
+    const hasExistingIdentity =
+      this.currentBaseUrl !== null ||
+      this.currentUserId !== null ||
+      this.currentToken !== null ||
+      this.currentUrl !== null
+    const identityChanged =
+      (this.currentBaseUrl !== null && this.currentBaseUrl !== nextBaseUrl) ||
+      (this.currentUserId !== null && this.currentUserId !== nextUserId) ||
+      (this.currentToken !== null && this.currentToken !== nextToken) ||
+      (this.currentUrl !== null && this.currentUrl !== nextUrl)
+
+    if (!hasExistingIdentity || identityChanged) {
+      if (hasExistingIdentity) {
+        const conflictPayload: AuthConflictPayload = {
+          currentUserId: this.currentUserId ?? '',
+          newUserId: nextUserId,
+          message:
+            `检测到连接身份/参数变化：` +
+            `oldUser=${this.currentUserId ?? 'null'} -> newUser=${nextUserId}, ` +
+            `oldBaseUrl=${this.currentBaseUrl ?? 'null'} -> newBaseUrl=${nextBaseUrl}, ` +
+            `tokenChanged=${this.currentToken ? this.currentToken !== nextToken : true}。` +
+            `将切换到最新登录态并重建连接。`,
+        }
+        // 通知所有标签页：登录态变化（方便页面自行处理旧会话）
+        this.broadcastToAllTabs(WorkerToTabMessageType.WORKER_AUTH_CONFLICT, conflictPayload)
+        console.warn('[SharedWorker]', conflictPayload.message)
+      }
+
+      // 更新为最新的连接参数
+      this.currentBaseUrl = nextBaseUrl
+      this.currentUserId = nextUserId
+      this.currentToken = nextToken
+      this.currentUrl = nextUrl
       this.config = initPayload.config
       this.sharedWorkerIdleTimeout = initPayload.sharedWorkerIdleTimeout ?? 30000
 
-      this.connect()
+      // 登录态切换：清空缓存（避免新 tab 回放到旧数据）
+      this.lastMessageByType.clear()
+
+      // 断开旧 socket（如果有），由后续 checkAllTabsVisibility 决定是否立即用新参数连接
+      if (this.socket) {
+        console.log('[SharedWorker] 检测到登录态变化，断开旧连接以使用新参数')
+        this.disconnect()
+      }
     } else {
-      // 已有连接，直接通知标签页已连接
+      // 未变化时，仅更新配置/超时时间（允许新 tab 提供更完整配置）
+      this.config = initPayload.config
+      this.sharedWorkerIdleTimeout = initPayload.sharedWorkerIdleTimeout ?? this.sharedWorkerIdleTimeout
+    }
+
+    // 若已有连接，直接通知该标签页
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.sendToTab(port, WorkerToTabMessageType.WORKER_CONNECTED, {})
     }
 
-    // 重置空闲定时器
-    this.resetIdleTimer()
+    // 检查所有标签页可见性，决定是否需要保持连接/发起连接
+    this.checkAllTabsVisibility()
   }
 
   /**
@@ -196,6 +323,8 @@ class WebSocketManager {
     if (this.tabs.size === 0) {
       // 没有标签页了，开始空闲倒计时
       console.log(`[SharedWorker] 所有标签页已关闭，将在 ${this.sharedWorkerIdleTimeout}ms 后断开连接`)
+      this.clearReconnectTimer()
+      this.stopTabCleanup()
       this.startIdleTimer()
     } else {
       // 还有标签页，检查可见性
@@ -214,6 +343,7 @@ class WebSocketManager {
     }
 
     tab.isVisible = isVisible
+    tab.lastSeen = Date.now()
     console.log(`[SharedWorker] 标签页 ${tabId} 可见性更新: ${isVisible}`)
 
     this.checkAllTabsVisibility()
@@ -230,11 +360,21 @@ class WebSocketManager {
     if (allHidden) {
       // 所有标签页都不可见，开始空闲倒计时
       console.log(`[SharedWorker] 所有标签页都不可见，将在 ${this.sharedWorkerIdleTimeout}ms 后断开连接`)
+      // 不要在后台持续重连（容易造成频繁断开/重连、也会影响新标签页复用）
+      this.clearReconnectTimer()
       this.startIdleTimer()
     } else {
       // 至少有一个标签页可见，取消倒计时
       console.log('[SharedWorker] 至少有一个标签页可见，保持连接')
       this.resetIdleTimer()
+
+      // 检查连接状态，如果未连接则重新连接
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        if (this.currentUrl) {
+          console.log('[SharedWorker] 检测到连接已断开，标签页可见，尝试重新连接')
+          this.connect()
+        }
+      }
     }
   }
 
@@ -277,7 +417,27 @@ class WebSocketManager {
       return
     }
 
+    // 熔断：短时间内被服务端频繁正常关闭时，暂停自动重连，避免打爆服务端/刷屏
+    if (Date.now() < this.reconnectSuppressedUntil) {
+      console.warn('[SharedWorker] 自动重连已熔断，暂不连接', {
+        suppressedUntil: this.reconnectSuppressedUntil,
+      })
+      return
+    }
+
+    // 没有可见标签页时，不主动连接（等 TAB_VISIBILITY 变为 true 再连）
+    if (!this.hasVisibleTab()) {
+      console.log('[SharedWorker] 当前无可见标签页，跳过连接')
+      return
+    }
+
+    // 避免重复 connect
+    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+
     this.manualClose = false
+    this.clearReconnectTimer()
 
     try {
       this.socket = new WebSocket(this.currentUrl)
@@ -285,6 +445,8 @@ class WebSocketManager {
       this.socket.onopen = () => {
         console.log('[SharedWorker] ✅ WebSocket 连接成功')
         this.reconnectAttempts = 0
+        this.lastOpenAt = Date.now()
+        this.fastClose1000Count = 0
         this.startHeartbeat()
 
         // 通知所有标签页已连接
@@ -297,13 +459,49 @@ class WebSocketManager {
       }
 
       this.socket.onclose = (event: CloseEvent) => {
-        console.log('[SharedWorker] WebSocket 连接关闭', event.code, event.reason)
+        const now = Date.now()
+        const liveMs = this.lastOpenAt ? now - this.lastOpenAt : -1
+        console.log('[SharedWorker] WebSocket 连接关闭', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: (event as any).wasClean,
+          liveMs,
+        })
         this.stopHeartbeat()
 
         // 通知所有标签页已断开
         this.broadcastToAllTabs(WorkerToTabMessageType.WORKER_DISCONNECTED, {})
 
-        if (!this.manualClose && this.config?.autoReconnect) {
+        // 诊断：服务端正常关闭(1000)且“快速关闭”，多半是服务端策略（鉴权失败/单连接踢线/频控等）
+        if (event.code === 1000 && liveMs >= 0 && liveMs < 3000) {
+          this.fastClose1000Count += 1
+          console.warn('[SharedWorker] 检测到快速 1000 关闭', {
+            fastClose1000Count: this.fastClose1000Count,
+            liveMs,
+          })
+
+          // 连续快速关闭达到阈值：熔断 60s 并广播错误给页面，避免无限重连
+          if (this.fastClose1000Count >= 3) {
+            this.reconnectSuppressedUntil = now + 60000
+            const errorPayload: ErrorPayload = {
+              message:
+                'WebSocket 被服务端频繁正常关闭(1000)，已临时暂停自动重连 60s。请检查 token/服务端是否限制同账号多连接/是否需要额外鉴权消息。',
+              error: {
+                code: event.code,
+                reason: event.reason,
+                liveMs,
+              },
+            }
+            this.broadcastToAllTabs(WorkerToTabMessageType.WORKER_ERROR, errorPayload)
+            return
+          }
+        } else {
+          // 非快速 1000，重置计数
+          this.fastClose1000Count = 0
+        }
+
+        // 仅在「有可见标签页」时才自动重连（避免后台空转重连）
+        if (!this.manualClose && this.config?.autoReconnect && this.tabs.size > 0 && this.hasVisibleTab()) {
           this.scheduleReconnect()
         }
       }
@@ -340,6 +538,11 @@ class WebSocketManager {
    * 计划重连
    */
   private scheduleReconnect(): void {
+    // 后台/无标签页时不重连，等待可见标签页触发 connect()
+    if (this.tabs.size === 0 || !this.hasVisibleTab()) {
+      return
+    }
+
     const maxAttempts = this.config?.maxReconnectAttempts ?? 10
     const reconnectDelay = this.config?.reconnectDelay ?? 3000
     const reconnectDelayMax = this.config?.reconnectDelayMax ?? 10000
@@ -356,7 +559,7 @@ class WebSocketManager {
 
     console.log(`[SharedWorker] 将在 ${delay}ms 后进行第 ${this.reconnectAttempts} 次重连`)
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.clearReconnectTimer()
     this.reconnectTimer = (globalThis as any).setTimeout(() => {
       this.connect()
     }, delay)
@@ -370,10 +573,7 @@ class WebSocketManager {
     this.stopHeartbeat()
     this.clearIdleTimer()
 
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = null
-    }
+    this.clearReconnectTimer()
 
     if (this.socket) {
       this.socket.close()
@@ -452,6 +652,9 @@ class WebSocketManager {
       message,
     }
 
+    // 缓存该类型最后一条消息，便于新标签页/晚注册回调能立即拿到最新状态
+    this.lastMessageByType.set(message.type, serverMessagePayload)
+
     let sentCount = 0
     for (const tab of this.tabs.values()) {
       console.log(`[SharedWorker] 检查标签页 ${tab.tabId}, 注册的类型:`, Array.from(tab.registeredTypes))
@@ -475,10 +678,18 @@ class WebSocketManager {
       return
     }
 
+    tab.lastSeen = Date.now()
     tab.registeredTypes.add(payload.type)
     tab.callbackMap.set(payload.callbackId, payload.type)
     console.log(`[SharedWorker] ✅ 标签页 ${tabId} 注册回调: ${payload.type} (${payload.callbackId})`)
     console.log(`[SharedWorker] 标签页 ${tabId} 当前注册的所有类型:`, Array.from(tab.registeredTypes))
+
+    // 回放该类型的最后一条消息（如果有），确保新开标签页能立刻拿到最新数据
+    const cached = this.lastMessageByType.get(payload.type)
+    if (cached) {
+      console.log(`[SharedWorker] 🔁 回放缓存消息到标签页 ${tabId}, type: ${payload.type}`)
+      this.sendToTab(tab.port, WorkerToTabMessageType.WORKER_MESSAGE, cached)
+    }
   }
 
   /**
@@ -491,6 +702,7 @@ class WebSocketManager {
       return
     }
 
+    tab.lastSeen = Date.now()
     if (payload.callbackId) {
       // 移除特定回调
       const type = tab.callbackMap.get(payload.callbackId)
@@ -545,6 +757,80 @@ class WebSocketManager {
       this.sendToTab(tab.port, type, payload)
     }
   }
+
+  /**
+   * 强制重置 Worker 状态：断开 WebSocket、清空状态，但不终止 Worker
+   * 用于 forceNewWorkerOnStart 场景，让 Worker 重新接受新的连接参数
+   */
+  forceReset(reason?: string): void {
+    console.warn('[SharedWorker] 🔄 收到强制重置指令，正在重置 Worker 状态', { reason })
+
+    // 断开 WebSocket（手动关闭，防止自动重连）
+    this.disconnect()
+
+    // 清理缓存/状态
+    this.lastMessageByType.clear()
+    this.currentUrl = null
+    this.currentBaseUrl = null
+    this.currentUserId = null
+    this.currentToken = null
+
+    // 通知所有标签页已断开（但不关闭端口，让它们可以重新初始化）
+    this.broadcastToAllTabs(WorkerToTabMessageType.WORKER_DISCONNECTED, {})
+
+    console.log('[SharedWorker] ✅ Worker 状态已重置，等待新的连接参数')
+  }
+
+  /**
+   * 强制关闭 Worker：断开 WebSocket、清空状态、关闭所有端口
+   * 用于"退出登录/强制重置连接"，避免旧 worker 持有旧 token 影响新会话
+   */
+  forceShutdown(reason?: string): void {
+    console.warn('[SharedWorker] ⚠️ 收到强制关闭指令，正在关闭 Worker', { reason })
+
+    // 先断开 WebSocket（手动关闭，防止自动重连）
+    this.disconnect()
+
+    // 清理缓存/状态
+    this.lastMessageByType.clear()
+    this.currentUrl = null
+    this.currentBaseUrl = null
+    this.currentUserId = null
+    this.currentToken = null
+
+    // 关闭所有端口并清空 tabs
+    for (const tab of this.tabs.values()) {
+      try {
+        tab.port.postMessage({
+          type: WorkerToTabMessageType.WORKER_DISCONNECTED,
+          payload: {},
+          timestamp: Date.now(),
+        })
+      } catch {
+        // 忽略发送消息失败（端口可能已关闭）
+      }
+      try {
+        tab.port.close()
+      } catch {
+        // 忽略关闭端口失败
+      }
+    }
+    this.tabs.clear()
+
+    this.stopTabCleanup()
+
+    // 显式终止 SharedWorker（否则可能在 DevTools 里仍显示存活一段时间）
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const workerClose = (globalThis as any).close as undefined | (() => void)
+    if (typeof workerClose === 'function') {
+      console.warn('[SharedWorker] 🛑 正在终止 SharedWorker 进程')
+      try {
+        workerClose()
+      } catch (error) {
+        console.warn('[SharedWorker] 终止 SharedWorker 失败', error)
+      }
+    }
+  }
 }
 
 // 创建全局 WebSocket 管理器实例
@@ -560,6 +846,9 @@ const wsManager = new WebSocketManager()
   port.onmessage = (e: MessageEvent) => {
     const message = e.data as TabToWorkerMessage
     console.log(`[SharedWorker] 📬 收到标签页消息, type: ${message.type}, tabId: ${message.tabId}`)
+    // 更新该标签页最后活跃时间（心跳/任意消息都算）
+    const tab = (wsManager as any).tabs?.get?.(message.tabId) as TabInfo | undefined
+    if (tab) tab.lastSeen = Date.now()
 
     switch (message.type) {
       case 'TAB_INIT':
@@ -588,11 +877,19 @@ const wsManager = new WebSocketManager()
         break
 
       case 'TAB_PING':
-        // 响应 PING
+        // 响应 PING（tab 侧心跳）
         port.postMessage({
           type: 'WORKER_PONG',
           timestamp: Date.now(),
         })
+        break
+
+      case 'TAB_FORCE_RESET':
+        wsManager.forceReset((message.payload as ForceShutdownPayload)?.reason)
+        break
+
+      case 'TAB_FORCE_SHUTDOWN':
+        wsManager.forceShutdown((message.payload as ForceShutdownPayload)?.reason)
         break
 
       default:

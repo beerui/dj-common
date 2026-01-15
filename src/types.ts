@@ -23,6 +23,10 @@ export enum TabToWorkerMessageType {
   TAB_DISCONNECT = 'TAB_DISCONNECT',
   /** PING 心跳 */
   TAB_PING = 'TAB_PING',
+  /** 强制关闭 Worker（用于退出登录/强制重置连接） */
+  TAB_FORCE_SHUTDOWN = 'TAB_FORCE_SHUTDOWN',
+  /** 强制重置 Worker 状态（断开 WebSocket 但不终止 Worker） */
+  TAB_FORCE_RESET = 'TAB_FORCE_RESET',
 }
 
 /**

@@ -26,6 +26,8 @@ import type {
 export interface SharedWorkerManagerConfig extends InitPayload {
   /** 日志级别 */
   logLevel?: LogLevel
+  /** 启动时强制新建 SharedWorker（会生成新的 worker 会话名，并尝试关闭旧 worker） */
+  forceNewWorkerOnStart?: boolean
 }
 
 /**
@@ -40,6 +42,8 @@ interface CallbackEntryWithId<T = unknown> extends MessageCallbackEntry<T> {
  * SharedWorker 管理器类
  */
 export class SharedWorkerManager {
+  private static readonly WORKER_NAME = 'dj-common-websocket-worker'
+
   /** SharedWorker 实例 */
   private worker: SharedWorker | null = null
 
@@ -67,9 +71,6 @@ export class SharedWorkerManager {
   /** 日志器 */
   private readonly logger: Logger
 
-  /** Worker Blob URL（用于清理） */
-  private workerBlobUrl: string | null = null
-
   /** 连接回调 */
   private onConnectedCallback: (() => void) | null = null
 
@@ -81,6 +82,12 @@ export class SharedWorkerManager {
 
   /** 身份冲突回调 */
   private onAuthConflictCallback: ((conflict: AuthConflictPayload) => void) | null = null
+
+  /** 标签页心跳定时器（用于让 Worker 能识别已关闭标签页） */
+  private pingTimer: ReturnType<typeof globalThis.setInterval> | null = null
+
+  /** 是否已初始化卸载监听 */
+  private unloadListenerInitialized = false
 
   /**
    * 构造函数
@@ -99,21 +106,51 @@ export class SharedWorkerManager {
   }
 
   /**
+   * 发送重置命令到现有 Worker（断开 WebSocket 并清理状态，但不终止 Worker）
+   */
+  private async sendResetToExistingWorker(workerScriptUrl: string): Promise<void> {
+    try {
+      // 连接到现有的 SharedWorker
+      const existing = new SharedWorker(workerScriptUrl, { name: SharedWorkerManager.WORKER_NAME })
+      const port = existing.port
+      port.start()
+      port.postMessage({
+        type: 'TAB_FORCE_RESET' as TabToWorkerMessageType,
+        payload: { reason: 'force_new_start' },
+        tabId: this.tabId,
+        timestamp: Date.now(),
+      } satisfies TabToWorkerMessage)
+      // 等待消息发送完成后再关闭 port
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      port.close()
+      this.logger.debug('[SharedWorkerManager] 已发送重置命令到现有 Worker')
+    } catch (error) {
+      this.logger.warn('[SharedWorkerManager] 发送重置命令失败（可忽略）', error)
+    }
+  }
+
+  /**
    * 启动 SharedWorker 连接
    */
   async start(): Promise<boolean> {
     try {
       this.logger.debug('[SharedWorkerManager] 开始启动 SharedWorker')
 
-      // 创建 Worker Blob URL
-      const workerScript = this.getWorkerScriptBlob()
-      this.workerBlobUrl = URL.createObjectURL(workerScript)
-      this.logger.debug(`[SharedWorkerManager] Worker Blob URL 创建成功: ${this.workerBlobUrl}`)
+      // 创建 Worker 脚本 URL（必须跨标签页一致，否则 SharedWorker 无法复用）
+      // 注意：Blob URL 每次都会不同，因此不能用于 SharedWorker 复用。
+      const workerScriptUrl = this.getWorkerScriptDataUrl()
+      this.logger.debug(`[SharedWorkerManager] Worker Script URL 创建成功: ${workerScriptUrl.slice(0, 60)}...`)
 
-      // 创建 SharedWorker（使用 classic 模式，不是 module）
+      // 若要求强制重置，则先发送重置命令让 Worker 断开 WebSocket 并清理状态
+      if (this.config.forceNewWorkerOnStart) {
+        this.logger.debug('[SharedWorkerManager] forceNewWorkerOnStart=true，发送重置命令')
+        await this.sendResetToExistingWorker(workerScriptUrl)
+      }
+
+      // 创建 SharedWorker（使用固定的 name，所有标签页共享同一个 Worker）
       this.logger.debug('[SharedWorkerManager] 正在创建 SharedWorker 实例...')
-      this.worker = new SharedWorker(this.workerBlobUrl, {
-        name: 'dj-common-websocket-worker',
+      this.worker = new SharedWorker(workerScriptUrl, {
+        name: SharedWorkerManager.WORKER_NAME,
         // 注意：不使用 type: 'module'，因为 Blob URL 作为 module 有 CORS 限制
       })
       this.logger.debug('[SharedWorkerManager] ✅ SharedWorker 实例创建成功')
@@ -126,6 +163,9 @@ export class SharedWorkerManager {
 
       // 设置页面可见性监听
       this.setupVisibilityListener()
+
+      // 设置页面卸载监听（页面关闭/刷新时通知 Worker 及时移除 tab）
+      this.setupUnloadListener()
 
       // 发送初始化消息（只发送可序列化的配置项）
       const serializableConfig = {
@@ -149,6 +189,9 @@ export class SharedWorkerManager {
         } as InitPayload
       )
 
+      // 启动与 Worker 的轻量心跳（用于 Worker 回收已关闭标签页）
+      this.startPing()
+
       this.logger.info('[SharedWorkerManager] SharedWorker 已启动')
       return true
     } catch (error) {
@@ -158,33 +201,87 @@ export class SharedWorkerManager {
   }
 
   /**
-   * 停止 SharedWorker 连接
+   * 停止 SharedWorker 连接（只断开当前标签页，不影响其他标签页）
    */
   stop(): void {
-    this.logger.debug('[SharedWorkerManager] 停止 SharedWorker')
+    this.logger.debug('[SharedWorkerManager] 停止当前标签页的 SharedWorker 连接')
 
-    // 发送断开消息
+    // 保存 port 引用，用于延迟关闭
+    const portToClose = this.port
+
+    // 发送断开消息，告知 Worker 移除当前标签页
     if (this.port) {
       this.sendToWorker('TAB_DISCONNECT' as TabToWorkerMessageType, {})
     }
 
+    // 停止心跳
+    this.stopPing()
+
     // 移除可见性监听
     this.removeVisibilityListener()
 
-    // 清理资源
-    if (this.port) {
-      this.port.close()
-      this.port = null
-    }
+    // 移除卸载监听
+    this.removeUnloadListener()
 
-    if (this.workerBlobUrl) {
-      URL.revokeObjectURL(this.workerBlobUrl)
-      this.workerBlobUrl = null
-    }
-
+    // 清理引用（但延迟关闭 port，确保消息发送完成）
+    this.port = null
     this.worker = null
     this.connected = false
     this.callbacks.clear()
+
+    // 延迟关闭 port，确保 postMessage 消息被发送出去
+    if (portToClose) {
+      setTimeout(() => {
+        try {
+          portToClose.close()
+        } catch {
+          // 忽略关闭错误
+        }
+      }, 100)
+    }
+  }
+
+  /**
+   * 强制关闭 Worker（会影响所有标签页，用于退出登录）
+   */
+  forceShutdown(): void {
+    this.logger.debug('[SharedWorkerManager] 强制关闭 Worker（退出登录）')
+
+    // 保存 port 引用，用于延迟关闭
+    const portToClose = this.port
+
+    // 发送强制关闭命令
+    if (this.port) {
+      this.sendToWorker('TAB_FORCE_SHUTDOWN' as TabToWorkerMessageType, {
+        reason: 'logout',
+      })
+    }
+
+    // 停止心跳
+    this.stopPing()
+
+    // 移除可见性监听
+    this.removeVisibilityListener()
+
+    // 移除卸载监听
+    this.removeUnloadListener()
+
+    // 清理引用
+    this.port = null
+    this.worker = null
+    this.connected = false
+    this.callbacks.clear()
+
+    // 延迟关闭 port
+    if (portToClose) {
+      setTimeout(() => {
+        try {
+          portToClose.close()
+        } catch {
+          // 忽略关闭错误
+        }
+      }, 100)
+    }
   }
 
   /**
@@ -350,6 +447,18 @@ export class SharedWorkerManager {
         break
 
       case 'WORKER_MESSAGE' as WorkerToTabMessageType:
+        // 始终打印每一条来自 Worker 的服务器消息，便于排查“回调未注册/未匹配”导致页面无回显的问题
+        try {
+          const payload = message.payload as ServerMessagePayload
+          // 用 console.log 确保即使 logLevel 较高也能看到
+
+          console.log('[SharedWorkerManager] 📨 收到服务器消息（经 Worker 转发）:', payload?.message)
+          this.logger.info('[SharedWorkerManager] 📨 收到服务器消息（经 Worker 转发）', payload?.message)
+          this.logger.debug('[SharedWorkerManager] 🧾 原始消息 data:', payload?.data)
+        } catch (error) {
+          this.logger.warn('[SharedWorkerManager] 打印服务器消息失败', error)
+        }
+
         this.handleServerMessage(message.payload as ServerMessagePayload)
         break
 
@@ -467,19 +576,84 @@ export class SharedWorkerManager {
   }
 
   /**
-   * 获取 Worker 脚本 Blob
+   * 启动与 Worker 的轻量心跳
+   * 目的：当标签页被强制关闭/崩溃时，Worker 可通过超时回收该 tab
    */
-  private getWorkerScriptBlob(): Blob {
+  private startPing(): void {
+    this.stopPing()
+    if (typeof window === 'undefined' || !this.port) return
+
+    // 10s 一次足够，开销很小
+    this.pingTimer = globalThis.setInterval(() => {
+      if (!this.port) return
+      this.sendToWorker('TAB_PING' as TabToWorkerMessageType, {})
+    }, 10000)
+  }
+
+  private stopPing(): void {
+    if (this.pingTimer !== null) {
+      clearInterval(this.pingTimer)
+      this.pingTimer = null
+    }
+  }
+
+  /**
+   * 设置页面卸载监听（pagehide/beforeunload）
+   */
+  private setupUnloadListener(): void {
+    if (typeof window === 'undefined' || this.unloadListenerInitialized) return
+
+    window.addEventListener('pagehide', this.handlePageHide, { capture: true })
+    window.addEventListener('beforeunload', this.handlePageHide, { capture: true })
+    this.unloadListenerInitialized = true
+    this.logger.debug('[SharedWorkerManager] 已设置页面卸载监听')
+  }
+
+  private removeUnloadListener(): void {
+    if (typeof window === 'undefined' || !this.unloadListenerInitialized) return
+    window.removeEventListener('pagehide', this.handlePageHide, { capture: true } as unknown as boolean)
+    window.removeEventListener('beforeunload', this.handlePageHide, { capture: true } as unknown as boolean)
+    this.unloadListenerInitialized = false
+    this.logger.debug('[SharedWorkerManager] 已移除页面卸载监听')
+  }
+
+  private handlePageHide = (): void => {
+    // 尽量在页面销毁前通知 Worker 移除 tab
+    if (this.port) {
+      this.sendToWorker('TAB_DISCONNECT' as TabToWorkerMessageType, {})
+    }
+  }
+
+  /**
+   * 获取 Worker 脚本 Data URL
+   * 说明：SharedWorker 的复用依据是「脚本 URL + name」，所以必须让不同标签页拿到完全一致的脚本 URL。
+   */
+  private getWorkerScriptDataUrl(): string {
+    const workerCode = this.getWorkerScriptContent()
+    this.logger.debug(`[SharedWorkerManager] 正在创建 Worker Data URL, 代码长度: ${workerCode.length}`)
+
+    // 兼容中文日志：必须做 UTF-8 base64
+    const base64 = this.toBase64Utf8(workerCode)
+    return `data:application/javascript;charset=utf-8;base64,${base64}`
+  }
+
+  /**
+   * UTF-8 Base64 编码（避免 btoa 处理非 latin1 时报错）
+   */
+  private toBase64Utf8(input: string): string {
     try {
-      const workerCode = this.getWorkerScriptContent()
-      this.logger.debug(`[SharedWorkerManager] 正在创建 Worker Blob, 代码长度: ${workerCode.length}`)
-
-      const blob = new Blob([workerCode], { type: 'application/javascript' })
-      this.logger.debug(`[SharedWorkerManager] ✅ Worker Blob 创建成功, size: ${blob.size}`)
-
-      return blob
+      if (typeof TextEncoder !== 'undefined') {
+        const bytes = new TextEncoder().encode(input)
+        let binary = ''
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+        // eslint-disable-next-line no-undef
+        return btoa(binary)
+      }
+      // 兜底：老浏览器
+      // eslint-disable-next-line no-undef
+      return btoa(unescape(encodeURIComponent(input)))
     } catch (error) {
-      this.logger.error('[SharedWorkerManager] ❌ 创建 Worker Blob 失败:', error)
+      this.logger.error('[SharedWorkerManager] ❌ Worker 脚本 base64 编码失败', error)
       throw error
     }
   }
