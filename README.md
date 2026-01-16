@@ -92,6 +92,8 @@ npm run build
 
 推送消息必须要是：`chore: bump version to 1.0.0-beta.7`
 
+`> 验证通过了，你需要提交一个PR合并到main分支，提交的标题是chore: bump version to 1.0.0-beta.15 发布一个beta版本`
+
 ```bash
 # 自动版本管理和发布
 npm run release:patch  # 补丁版本 1.0.0 -> 1.0.1
