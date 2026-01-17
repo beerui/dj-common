@@ -49,6 +49,8 @@ export enum WorkerToTabMessageType {
   WORKER_AUTH_CONFLICT = 'WORKER_AUTH_CONFLICT',
   /** PONG 响应 */
   WORKER_PONG = 'WORKER_PONG',
+  /** 标签页不存在（需要重新初始化） */
+  WORKER_TAB_NOT_FOUND = 'WORKER_TAB_NOT_FOUND',
 }
 
 /**

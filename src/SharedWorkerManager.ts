@@ -488,6 +488,11 @@ export class SharedWorkerManager {
         this.logger.debug('[SharedWorkerManager] 收到 PONG')
         break
 
+      case 'WORKER_TAB_NOT_FOUND' as WorkerToTabMessageType:
+        this.logger.warn('[SharedWorkerManager] Worker 通知标签页不存在，需要重新初始化')
+        this.reinitialize()
+        break
+
       default:
         this.logger.warn('[SharedWorkerManager] 未知消息类型', message.type)
     }
@@ -582,9 +587,60 @@ export class SharedWorkerManager {
     this.logger.debug(`[SharedWorkerManager] 页面可见性变化: ${isVisible}`)
 
     if (this.port) {
-      const payload: VisibilityPayload = { isVisible }
-      this.sendToWorker('TAB_VISIBILITY' as TabToWorkerMessageType, payload)
+      // 如果页面变为可见且当前未连接，重新发送 TAB_INIT 重新初始化
+      // 这处理了空闲超时后标签页被移除，用户再次切换回来的情况
+      if (isVisible && !this.connected) {
+        this.logger.info('[SharedWorkerManager] 页面变为可见且未连接，重新初始化连接')
+        this.reinitialize()
+      } else {
+        const payload: VisibilityPayload = { isVisible }
+        this.sendToWorker('TAB_VISIBILITY' as TabToWorkerMessageType, payload)
+      }
     }
+  }
+
+  /**
+   * 重新初始化连接（发送 TAB_INIT 消息）
+   * 用于页面从不可见变为可见且连接已断开的情况
+   */
+  private reinitialize(): void {
+    if (!this.port) {
+      this.logger.warn('[SharedWorkerManager] 无法重新初始化：port 未初始化')
+      return
+    }
+
+    const serializableConfig = {
+      heartbeatInterval: this.config.config.heartbeatInterval,
+      maxReconnectAttempts: this.config.config.maxReconnectAttempts,
+      reconnectDelay: this.config.config.reconnectDelay,
+      reconnectDelayMax: this.config.config.reconnectDelayMax,
+      autoReconnect: this.config.config.autoReconnect,
+      logLevel: this.config.config.logLevel,
+    }
+
+    this.sendToWorker(
+      'TAB_INIT' as TabToWorkerMessageType,
+      {
+        url: this.config.url,
+        userId: this.config.userId,
+        token: this.config.token,
+        isVisible: true,
+        config: serializableConfig,
+        sharedWorkerIdleTimeout: this.config.sharedWorkerIdleTimeout,
+      } as InitPayload
+    )
+
+    // 重新注册所有回调
+    for (const entry of this.callbacks.values()) {
+      const payload: RegisterCallbackPayload = {
+        type: entry.type,
+        callbackId: entry.id,
+      }
+      this.sendToWorker('TAB_REGISTER_CALLBACK' as TabToWorkerMessageType, payload)
+      this.logger.debug(`[SharedWorkerManager] 重新注册回调: ${entry.type} (${entry.id})`)
+    }
+
+    this.logger.info('[SharedWorkerManager] 已发送重新初始化消息')
   }
 
   /**

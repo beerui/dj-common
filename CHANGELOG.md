@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.1](https://github.com/beerui/dj-common/releases/tag/v1.0.1) (2026-01-17)
+
+### Bug Fixes
+
+- **SharedWorkerManager**: 修复空闲超时后标签页无法重新接收消息的问题
+  - 当所有标签页不可见导致 SharedWorker 空闲超时断开连接后，用户再次切换回标签页时，消息无法正常接收
+  - 新增 `WORKER_TAB_NOT_FOUND` 消息类型，当 Worker 发现标签页不存在时主动通知标签页重新初始化
+  - 优化 `updateTabVisibility` 方法，返回布尔值表示操作是否成功
+  - SharedWorkerManager 收到 `WORKER_TAB_NOT_FOUND` 后自动调用 `reinitialize()` 恢复连接
+
 ## [1.0.0](https://github.com/beerui/dj-common/releases/tag/v1.0.0) (2026-01-17)
 
 ### Features
