@@ -1,6 +1,6 @@
 # MessageSocket 消息触达业务方法
 
-> 基于 WebSocketClient 的业务层 WebSocket 封装，提供更便捷的消息处理和状态管理
+> 基于 WebSocketClient 的业务层 WebSocket 封装，支持三种连接模式，提供更便捷的消息处理和状态管理
 
 ## 安装
 
@@ -20,31 +20,36 @@ import MessageSocket from '@brewer/dj-common/MessageSocket'
 
 `MessageSocket` 是对 `WebSocketClient` 的业务层封装，提供了：
 
-- 📨 简化的消息收发 API
-- 🔄 连接状态管理
-- 🎯 类型安全的消息处理
-- 🛠️ 常用业务场景的快捷方法
+- 简化的消息收发 API
+- 连接状态管理
+- 类型安全的消息处理
+- 三种连接模式（SharedWorker / Visibility / Normal）
+- 自动降级策略
+- 网络状态监听
 
-## API
+## 连接模式
 
-基于 WebSocketClient 的用户消息管理类，适用于需要用户认证的场景（如获取用户未读消息数量）。
+MessageSocket 支持三种连接模式，以适应不同的使用场景：
 
-#### 使用示例
+| 模式         | 说明                              | 优势                     | 浏览器支持                |
+| ------------ | --------------------------------- | ------------------------ | ------------------------- |
+| SharedWorker | 所有标签页共享一个 WebSocket 连接 | 节省资源，后台可接收消息 | Chrome, Firefox, Edge     |
+| Visibility   | 根据页面可见性自动连接/断开       | 节省资源                 | 所有现代浏览器            |
+| Normal       | 每个标签页独立维持连接            | 兼容性好，后台可接收消息 | 所有支持 WebSocket 浏览器 |
 
-##### 基础使用流程
+## 基础使用
 
 ```typescript
 import { MessageSocket } from '@brewer/dj-common'
 
-// 1. 配置服务器地址(可选,如果使用默认配置可跳过)
+// 1. 配置服务器地址
 MessageSocket.setConfig({
-  baseUrl: 'ws://your-server.com', // 必填
-  path: '/api/websocket/messageServer', // 必填
+  url: 'wss://your-server.com/api/websocket/messageServer',
   heartbeatInterval: 25000,
   autoReconnect: true,
   maxReconnectAttempts: 10,
-  logLevel: 'warn', // 日志级别（debug/info/warn/error/silent）
-  enableVisibilityManagement: true, // 启用页面可见性管理（推荐）
+  connectionMode: 'auto', // 自动选择最佳模式（默认）
+  logLevel: 'warn',
 })
 
 // 2. 注册消息回调（在启动前设置）
@@ -83,152 +88,201 @@ MessageSocket.send({
   messageId: '123',
 })
 
-// 6. 检查连接状态
+// 6. 查看当前连接模式
+console.log('连接模式:', MessageSocket.getConnectionMode())
+
+// 7. 检查连接状态
 if (MessageSocket.isConnected()) {
   console.log('WebSocket 已连接')
 }
 
-// 7. 获取当前用户信息
+// 8. 获取当前用户信息
 const userId = MessageSocket.getCurrentUserId()
 const token = MessageSocket.getCurrentToken()
 
-// 8. 取消注册回调
+// 9. 取消注册回调
 MessageSocket.unregisterCallbacks('NOTIFICATION')
 
-// 9. 停止连接
+// 10. 停止连接
 MessageSocket.stop()
 ```
 
-##### 简化写法（链式调用）
+## API
+
+### setConfig()
 
 ```typescript
-import { MessageSocket } from '@brewer/dj-common'
+static setConfig(config: Partial<MessageSocketConfig>): typeof MessageSocket
+```
 
-// 配置和回调可以链式调用
+设置 MessageSocket 配置，支持链式调用。
+
+**参数**：
+
+| 参数名 | 类型                          | 必填 | 说明     |
+| ------ | ----------------------------- | ---- | -------- |
+| config | Partial\<MessageSocketConfig> | 是   | 配置选项 |
+
+**示例**：
+
+```typescript
 MessageSocket.setConfig({
-  baseUrl: 'ws://your-server.com',
-  path: '/api/websocket/messageServer',
-}).setCallbacks([
-  {
-    type: 'UNREAD_COUNT',
-    callback: (payload) => console.log('未读:', payload),
-  },
-])
+  url: 'wss://your-server.com/api/websocket/messageServer',
+  connectionMode: 'auto',
+  logLevel: 'debug',
+})
+```
 
-// 然后启动
+### setCallbacks()
+
+```typescript
+static setCallbacks(callbacks: MessageCallbackEntry[]): typeof MessageSocket
+```
+
+批量设置消息回调，支持链式调用。
+
+**参数**：
+
+| 参数名    | 类型                   | 必填 | 说明     |
+| --------- | ---------------------- | ---- | -------- |
+| callbacks | MessageCallbackEntry[] | 是   | 回调列表 |
+
+**示例**：
+
+```typescript
+MessageSocket.setCallbacks([
+  { type: 'UNREAD_COUNT', callback: (data) => console.log(data) },
+  { type: 'NEW_MESSAGE', callback: (data) => console.log(data) },
+])
+```
+
+### start()
+
+```typescript
+static start(options: MessageSocketStartOptions): void
+```
+
+启动 WebSocket 连接。
+
+**参数**：
+
+| 参数名  | 类型                      | 必填 | 说明     |
+| ------- | ------------------------- | ---- | -------- |
+| options | MessageSocketStartOptions | 是   | 启动选项 |
+
+**示例**：
+
+```typescript
 MessageSocket.start({
   userId: '1234567890',
   token: 'your-auth-token',
 })
 ```
 
-##### 类型安全的消息处理
+### stop()
 
 ```typescript
-import { MessageSocket, MessageCallbackEntry } from '@brewer/dj-common'
-
-// 定义消息类型
-interface UnreadCountData {
-  count: number
-  lastMessageTime: string
-}
-
-interface NewMessageData {
-  id: string
-  content: string
-  senderId: string
-  timestamp: string
-}
-
-// 类型安全的回调
-const callbacks: MessageCallbackEntry[] = [
-  {
-    type: 'UNREAD_COUNT',
-    callback: (data: UnreadCountData) => {
-      console.log(`未读消息: ${data.count}`)
-      console.log(`最后消息时间: ${data.lastMessageTime}`)
-    },
-  },
-  {
-    type: 'NEW_MESSAGE',
-    callback: (data: NewMessageData) => {
-      console.log(`新消息来自 ${data.senderId}: ${data.content}`)
-    },
-  },
-]
-
-MessageSocket.setCallbacks(callbacks)
+static stop(): void
 ```
 
-##### React 组件中使用
+停止连接并清理所有回调。
+
+### registerCallbacks()
 
 ```typescript
-import { useEffect } from 'react'
-import { MessageSocket } from '@brewer/dj-common'
-
-function MessageComponent() {
-  useEffect(() => {
-    // 配置并启动
-    MessageSocket
-      .setConfig({
-        baseUrl: 'ws://your-server.com',
-        path: '/api/websocket/messageServer',
-      })
-      .setCallbacks([
-        {
-          type: 'UNREAD_COUNT',
-          callback: (data) => {
-            // 更新 UI 状态
-            console.log('未读消息:', data)
-          }
-        }
-      ])
-
-    MessageSocket.start({
-      userId: user.id,
-      token: user.token,
-    })
-
-    // 清理
-    return () => {
-      MessageSocket.stop()
-    }
-  }, [user.id, user.token])
-
-  return <div>消息组件</div>
-}
+static registerCallbacks<T = unknown>(entry: MessageCallbackEntry<T>): void
 ```
 
-#### API 说明
+注册单个消息回调。
 
-##### 配置选项
+**参数**：
+
+| 参数名 | 类型                    | 必填 | 说明     |
+| ------ | ----------------------- | ---- | -------- |
+| entry  | MessageCallbackEntry<T> | 是   | 回调配置 |
+
+### unregisterCallbacks()
+
+```typescript
+static unregisterCallbacks<T = unknown>(type: string, callback?: Function): void
+```
+
+取消注册消息回调。如果不提供 `callback`，会移除该类型的所有回调。
+
+### send()
+
+```typescript
+static send(data: string | object): void
+```
+
+发送消息到服务器。
+
+### isConnected()
+
+```typescript
+static isConnected(): boolean
+```
+
+检查是否已连接。
+
+### getReadyState()
+
+```typescript
+static getReadyState(): number
+```
+
+获取 WebSocket 连接状态。
+
+### getConnectionMode()
+
+```typescript
+static getConnectionMode(): 'sharedWorker' | 'visibility' | 'normal'
+```
+
+获取当前连接模式。
+
+### getCurrentUserId()
+
+```typescript
+static getCurrentUserId(): string | null
+```
+
+获取当前连接的用户 ID。
+
+### getCurrentToken()
+
+```typescript
+static getCurrentToken(): string | null
+```
+
+获取当前连接的认证令牌。
+
+## 类型定义
+
+### MessageSocketConfig
 
 ```typescript
 interface MessageSocketConfig extends WebSocketConfig {
-  /** WebSocket 服务器基础地址 */
-  baseUrl?: string
-  /** WebSocket 路径 */
-  path?: string
-  /** 心跳间隔（毫秒），默认 25000 */
-  heartbeatInterval?: number
-  /** 最大重连次数，默认 10 */
-  maxReconnectAttempts?: number
-  /** 重连延迟（毫秒），默认 3000 */
-  reconnectDelay?: number
-  /** 最大重连延迟（毫秒），默认 10000 */
-  reconnectDelayMax?: number
-  /** 是否自动重连，默认 true */
-  autoReconnect?: boolean
+  /** WebSocket 服务器完整地址 */
+  url?: string
+  /** 消息回调列表 */
+  callbacks?: MessageCallbackEntry[]
   /** 日志级别，默认 'warn' */
   logLevel?: 'debug' | 'info' | 'warn' | 'error' | 'silent'
-  /** 是否启用页面可见性管理（标签页切换时自动断开/重连），默认 false */
+  /** 是否启用页面可见性管理，默认 false */
   enableVisibilityManagement?: boolean
-  /** 初始消息回调列表 */
-  callbacks?: MessageCallbackEntry[]
+  /** 连接模式，默认 'auto' */
+  connectionMode?: 'auto' | 'sharedWorker' | 'visibility' | 'normal'
+  /** SharedWorker 空闲超时时间（毫秒），默认 30000 */
+  sharedWorkerIdleTimeout?: number
+  /** 启动时强制新建 SharedWorker，默认 false */
+  forceNewWorkerOnStart?: boolean
+  /** 是否启用网络状态监听，默认 true */
+  enableNetworkListener?: boolean
 }
 ```
 
-##### 启动选项
+### MessageSocketStartOptions
 
 ```typescript
 interface MessageSocketStartOptions {
@@ -239,82 +293,7 @@ interface MessageSocketStartOptions {
 }
 ```
 
-##### 静态方法
-
-**配置相关**
-
-- `setConfig(config: Partial<MessageSocketConfig>): MessageSocket`
-  - 设置 MessageSocket 配置
-  - 支持链式调用
-  - 如果配置中包含 callbacks，会自动注册
-
-- `configure(config: Partial<MessageSocketConfig>): void`
-  - 配置 MessageSocket（不支持链式调用）
-  - 功能与 `setConfig` 相同
-
-**连接管理**
-
-- `start(options: MessageSocketStartOptions): void`
-  - 启动 WebSocket 连接
-  - 参数：
-    - `userId`: 用户ID（必需）
-    - `token`: 认证令牌（必需）
-  - 自动构建 WebSocket URL: `{baseUrl}{path}/{userId}?token={token}`
-  - 如果已存在相同用户的连接，会复用现有连接
-
-- `stop(): void`
-  - 停止连接并清理所有回调
-  - 清空当前用户信息
-
-**回调管理**
-
-- `setCallbacks(callbacks: MessageCallbackEntry[]): MessageSocket`
-  - 批量设置消息回调
-  - 支持链式调用
-  - 会调用 `registerCallbacks` 逐个注册
-
-- `registerCallbacks<T>(entry: MessageCallbackEntry<T>): void`
-  - 注册单个消息回调
-  - 泛型参数 `T` 指定消息数据类型
-  - 参数：
-    - `type`: 消息类型（字符串）
-    - `callback`: 回调函数 `(data: T, message?: unknown) => void`
-
-- `unregisterCallbacks<T>(type: string, callback?: (data: T, message?: unknown) => void): void`
-  - 取消注册消息回调
-  - 如果不提供 `callback`，会移除该类型的所有回调
-  - 如果提供 `callback`，只移除匹配的回调
-
-**消息发送**
-
-- `send(data: string | object): void`
-  - 发送消息到服务器
-  - 参数可以是字符串或对象
-  - 如果是对象，会自动转换为 JSON 字符串
-
-**状态查询**
-
-- `isConnected(): boolean`
-  - 检查是否已连接
-  - 返回 `true` 表示连接正常
-
-- `getReadyState(): number`
-  - 获取 WebSocket 连接状态
-  - 返回值对应 WebSocket 的 readyState:
-    - `0` (CONNECTING): 正在连接
-    - `1` (OPEN): 已连接
-    - `2` (CLOSING): 正在关闭
-    - `3` (CLOSED): 已关闭
-
-- `getCurrentUserId(): string | null`
-  - 获取当前连接的用户ID
-  - 未连接时返回 `null`
-
-- `getCurrentToken(): string | null`
-  - 获取当前连接的认证令牌
-  - 未连接时返回 `null`
-
-##### 消息回调类型
+### MessageCallbackEntry
 
 ```typescript
 interface MessageCallbackEntry<T = unknown> {
@@ -325,6 +304,62 @@ interface MessageCallbackEntry<T = unknown> {
 }
 ```
 
+## 连接模式详解
+
+### SharedWorker 模式（推荐）
+
+所有标签页共享一个 WebSocket 连接，默认启用。
+
+```typescript
+MessageSocket.setConfig({
+  url: 'wss://your-server.com/api/websocket/messageServer',
+  connectionMode: 'auto', // 或 'sharedWorker'
+  sharedWorkerIdleTimeout: 30000, // 所有标签页不可见后等待 30 秒才断开
+})
+```
+
+**特点**：
+
+- 所有标签页共享一个连接
+- 切换标签页不会断开连接
+- 所有标签页都能接收消息
+- 节省服务器资源
+
+### Visibility 模式
+
+根据页面可见性自动管理连接。
+
+```typescript
+MessageSocket.setConfig({
+  url: 'wss://your-server.com/api/websocket/messageServer',
+  connectionMode: 'visibility',
+  enableVisibilityManagement: true,
+})
+```
+
+**特点**：
+
+- 标签页不可见时自动断开
+- 标签页可见时自动重连
+- 节省资源但会有短暂断连
+
+### Normal 模式
+
+每个标签页独立连接。
+
+```typescript
+MessageSocket.setConfig({
+  url: 'wss://your-server.com/api/websocket/messageServer',
+  connectionMode: 'normal',
+})
+```
+
+**特点**：
+
+- 每个标签页独立维持连接
+- 兼容性最好
+- 所有标签页后台都能接收消息
+
 ## 使用场景
 
 ### 场景 1: 实时未读消息提醒
@@ -332,15 +367,12 @@ interface MessageCallbackEntry<T = unknown> {
 ```typescript
 import { MessageSocket } from '@brewer/dj-common'
 
-// 初始化消息服务
 MessageSocket.setConfig({
-  baseUrl: 'ws://your-server.com',
-  path: '/api/websocket/messageServer',
+  url: 'wss://your-server.com/api/websocket/messageServer',
 }).setCallbacks([
   {
     type: 'UNREAD_COUNT',
     callback: (data: { count: number }) => {
-      // 更新 UI 显示未读消息数
       updateBadge(data.count)
     },
   },
@@ -358,39 +390,67 @@ MessageSocket.start({
 MessageSocket.registerCallbacks({
   type: 'NEW_MESSAGE',
   callback: (data: { id: string; content: string; sender: string }) => {
-    // 显示消息通知
     showNotification({
       title: `来自 ${data.sender} 的新消息`,
       body: data.content,
     })
-
-    // 播放提示音
     playNotificationSound()
   },
 })
 ```
 
-### 场景 3: 用户切换
+### 场景 3: React 组件中使用
 
 ```typescript
-// 用户登出时停止连接
-function logout() {
-  MessageSocket.stop()
-  // 清理其他状态...
-}
+import { useEffect } from 'react'
+import { MessageSocket } from '@brewer/dj-common'
 
-// 用户登录时启动连接
-function login(userId: string, token: string) {
-  MessageSocket.start({ userId, token })
-}
+function MessageComponent({ user }) {
+  useEffect(() => {
+    MessageSocket.setConfig({
+      url: 'wss://your-server.com/api/websocket/messageServer',
+    }).setCallbacks([
+      {
+        type: 'UNREAD_COUNT',
+        callback: (data) => {
+          console.log('未读消息:', data)
+        },
+      },
+    ])
 
-// 切换用户（自动复用或重新连接）
-function switchUser(newUserId: string, newToken: string) {
-  // MessageSocket.start 会自动处理旧连接
-  MessageSocket.start({
-    userId: newUserId,
-    token: newToken,
-  })
+    MessageSocket.start({
+      userId: user.id,
+      token: user.token,
+    })
+
+    return () => {
+      MessageSocket.stop()
+    }
+  }, [user.id, user.token])
+
+  return <div>消息组件</div>
+}
+```
+
+### 场景 4: Vue 组件中使用
+
+```typescript
+import { onMounted, onUnmounted } from 'vue'
+import { MessageSocket } from '@brewer/dj-common'
+
+export default {
+  setup() {
+    onMounted(() => {
+      MessageSocket.setConfig({
+        url: 'wss://your-server.com/api/websocket/messageServer',
+      })
+      MessageSocket.start({ userId, token })
+    })
+
+    onUnmounted(() => {
+      MessageSocket.stop()
+    })
+  },
 }
 ```
 
@@ -398,32 +458,27 @@ function switchUser(newUserId: string, newToken: string) {
 
 ### 1. 配置顺序
 
-必须先调用 `setConfig` 设置 `baseUrl` 和 `path`，然后才能调用 `start`：
+必须先调用 `setConfig` 设置 `url`，然后才能调用 `start`：
 
 ```typescript
 // ✅ 正确
-MessageSocket.setConfig({
-  baseUrl: 'ws://server.com',
-  path: '/ws',
-})
+MessageSocket.setConfig({ url: 'wss://server.com/ws' })
 MessageSocket.start({ userId, token })
 
-// ❌ 错误 - 会警告缺少配置
+// ❌ 错误 - 会报错缺少配置
 MessageSocket.start({ userId, token })
 ```
 
-### 2. 回调注册时机
+### 2. URL 格式
 
-回调可以在启动前或启动后注册：
+URL 应包含完整路径，`start` 时会自动追加用户认证参数：
 
 ```typescript
-// 启动前注册（推荐）
-MessageSocket.setCallbacks([...])
-MessageSocket.start({ userId, token })
+// 配置的 URL
+url: 'wss://server.com/api/websocket/messageServer'
 
-// 启动后动态注册（也可以）
-MessageSocket.start({ userId, token })
-MessageSocket.registerCallbacks({ type: 'NEW_TYPE', callback: ... })
+// 实际连接的 URL（自动生成）
+// wss://server.com/api/websocket/messageServer/{userId}?token={token}
 ```
 
 ### 3. 连接复用
@@ -432,7 +487,7 @@ MessageSocket.registerCallbacks({ type: 'NEW_TYPE', callback: ... })
 
 ```typescript
 MessageSocket.start({ userId: '123', token: 'abc' })
-MessageSocket.start({ userId: '123', token: 'abc' }) // 复用连接，不会重新建立
+MessageSocket.start({ userId: '123', token: 'abc' }) // 复用连接
 
 MessageSocket.start({ userId: '456', token: 'xyz' }) // 新用户，会先停止旧连接
 ```
@@ -449,99 +504,27 @@ useEffect(() => {
 }, [])
 
 // Vue
-onMounted(() => {
-  MessageSocket.start({ userId, token })
-})
 onUnmounted(() => {
   MessageSocket.stop()
 })
 ```
 
-### 5. 多标签页管理（页面可见性）
-
-在 Web 应用中，用户可能会在多个标签页打开同一个应用。为了避免多个标签页同时建立 WebSocket 连接造成资源浪费和潜在的连接冲突，推荐启用页面可见性管理：
-
-```typescript
-MessageSocket.setConfig({
-  baseUrl: 'ws://server.com',
-  path: '/ws',
-  enableVisibilityManagement: true, // 启用页面可见性管理
-})
-
-MessageSocket.start({ userId, token })
-```
-
-**工作原理：**
-
-- 当标签页切换到后台（不可见）时，自动断开 WebSocket 连接
-- 当标签页切换到前台（可见）时，自动重新连接
-- 避免多个标签页同时维持连接，节省服务器资源
-- 用户始终能在当前活跃的标签页接收实时消息
-
-**推荐场景：**
-
-- 用户可能打开多个标签页的应用
-- 需要优化服务器连接数的场景
-- 移动端 WebView 应用（页面切换到后台）
-
-**注意事项：**
-
-- 当页面不可见时会断开连接，无法接收消息
-- 切换回可见时会自动重连，可能有短暂延迟
-- 如果需要在后台持续接收消息，请不要启用此功能
-
-### 6. 错误处理
-
-MessageSocket 内部会根据日志级别打印相应的日志信息：
+### 5. 日志控制
 
 ```typescript
 // 开启详细日志（用于调试）
-MessageSocket.setConfig({
-  baseUrl: 'ws://server.com',
-  path: '/ws',
-  logLevel: 'debug', // 输出所有日志
-})
+MessageSocket.setConfig({ logLevel: 'debug' })
 
 // 生产环境（仅输出错误）
-MessageSocket.setConfig({
-  baseUrl: 'ws://server.com',
-  path: '/ws',
-  logLevel: 'error', // 仅输出错误日志
-})
+MessageSocket.setConfig({ logLevel: 'error' })
 
-// 静默模式（不输出任何日志）
-MessageSocket.setConfig({
-  baseUrl: 'ws://server.com',
-  path: '/ws',
-  logLevel: 'silent', // 完全静默
-})
+// 静默模式
+MessageSocket.setConfig({ logLevel: 'silent' })
 ```
-
-### 7. 类型安全
-
-充分利用 TypeScript 的类型系统：
-
-```typescript
-// 定义消息类型
-interface MessagePayload {
-  type: 'UNREAD_COUNT' | 'NEW_MESSAGE' | 'NOTIFICATION'
-  data: unknown
-}
-
-// 类型安全的回调
-MessageSocket.registerCallbacks<{ count: number }>({
-  type: 'UNREAD_COUNT',
-  callback: (data) => {
-    // data 类型为 { count: number }
-    console.log(data.count)
-  },
-})
-```
-
----
 
 ## 相关链接
 
 - [GitHub 仓库](https://github.com/beerui/dj-common)
 - [NPM 包](https://www.npmjs.com/package/@brewer/dj-common)
 - [WebSocketClient API](./WebSocketClient.md)
+- [SharedWorkerManager API](./SharedWorkerManager.md)
