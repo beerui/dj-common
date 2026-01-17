@@ -13,7 +13,8 @@ npm install @brewer/dj-common
 ### WebSocket 相关
 
 - [WebSocketClient](./api/WebSocketClient.md) - 通用 WebSocket 客户端基类
-- [MessageSocket](./api/MessageSocket.md) - 业务层 WebSocket 封装
+- [MessageSocket](./api/MessageSocket.md) - 业务层 WebSocket 封装（支持三种连接模式）
+- [SharedWorkerManager](./api/SharedWorkerManager.md) - SharedWorker 标签页端管理器
 
 ### 工具类
 
@@ -32,13 +33,11 @@ const client = new WebSocketClient({
   url: 'ws://localhost:8080',
   heartbeatInterval: 30000,
   autoReconnect: true,
+  enableNetworkListener: true, // 网络恢复时自动重连
 })
 
-client.on({
-  type: 'message',
-  callback: (data) => {
-    console.log('收到消息:', data)
-  },
+client.on('message', (data) => {
+  console.log('收到消息:', data)
 })
 
 client.connect()
@@ -51,9 +50,9 @@ import { MessageSocket } from '@brewer/dj-common'
 
 // 1. 配置服务器地址
 MessageSocket.setConfig({
-  baseUrl: 'ws://your-server.com',
-  path: '/api/websocket/messageServer',
+  url: 'wss://your-server.com/api/websocket/messageServer',
   heartbeatInterval: 25000,
+  connectionMode: 'auto', // 自动选择最佳连接模式
 })
 
 // 2. 注册消息回调
@@ -92,7 +91,11 @@ MessageSocket.send({
   messageId: '123',
 })
 
-// 6. 停止连接
+// 6. 查看当前连接模式
+console.log('连接模式:', MessageSocket.getConnectionMode())
+// 输出: 'sharedWorker' | 'visibility' | 'normal'
+
+// 7. 停止连接
 MessageSocket.stop()
 ```
 
@@ -106,7 +109,8 @@ import { WebSocketClient, WebSocketConfig, MessageData } from '@brewer/dj-common
 const config: WebSocketConfig = {
   heartbeatInterval: 30000,
   maxReconnectAttempts: 10,
-  logLevel: 'debug', // 配置日志级别
+  logLevel: 'debug',
+  enableNetworkListener: true,
 }
 
 const client = new WebSocketClient(config)
@@ -119,25 +123,35 @@ client.on<{ content: string }>('message', (data) => {
 
 ## 特性
 
-- 📘 **TypeScript** - 完整的类型定义
-- 📦 **多格式支持** - ESM 和 CommonJS
-- 🔌 **按需引入** - Tree-shaking 支持
-- 🔧 **可配置** - 灵活的配置选项
-- 🔄 **自动重连** - 智能重连机制
-- 💓 **心跳检测** - 保持连接活性
-- 📝 **日志系统** - 内置可配置的日志管理
+- **TypeScript** - 完整的类型定义
+- **多格式支持** - ESM 和 CommonJS
+- **按需引入** - Tree-shaking 支持
+- **可配置** - 灵活的配置选项
+- **自动重连** - 智能重连机制
+- **心跳检测** - 保持连接活性
+- **日志系统** - 内置可配置的日志管理
+- **SharedWorker 支持** - 多标签页共享连接
+- **网络状态监听** - 网络恢复时自动重连
+
+## 连接模式
+
+MessageSocket 支持三种连接模式：
+
+| 模式         | 说明                           | 浏览器支持                |
+| ------------ | ------------------------------ | ------------------------- |
+| SharedWorker | 所有标签页共享一个连接（推荐） | Chrome, Firefox, Edge     |
+| Visibility   | 根据页面可见性自动连接/断开    | 所有现代浏览器            |
+| Normal       | 每个标签页独立连接             | 所有支持 WebSocket 浏览器 |
 
 ## 相关链接
 
 - [GitHub 仓库](https://github.com/beerui/dj-common)
 - [NPM 包](https://www.npmjs.com/package/@brewer/dj-common)
 - [更新日志](../CHANGELOG.md)
-- [开发指南](../DEVELOPMENT.md)
-- [测试指南](../TESTING.md)
 
 ## 贡献
 
-欢迎贡献代码！请查看 [开发指南](../DEVELOPMENT.md) 了解如何参与开发。
+欢迎贡献代码！请查看项目根目录的 README.md 了解如何参与开发。
 
 ## 许可证
 
