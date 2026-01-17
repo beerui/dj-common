@@ -488,6 +488,11 @@ export class SharedWorkerManager {
         this.logger.debug('[SharedWorkerManager] 收到 PONG')
         break
 
+      case 'WORKER_TAB_NOT_FOUND' as WorkerToTabMessageType:
+        this.logger.warn('[SharedWorkerManager] Worker 通知标签页不存在，需要重新初始化')
+        this.reinitialize()
+        break
+
       default:
         this.logger.warn('[SharedWorkerManager] 未知消息类型', message.type)
     }

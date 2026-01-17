@@ -15,6 +15,7 @@ const WorkerToTabMessageType = {
   WORKER_ERROR: 'WORKER_ERROR',
   WORKER_AUTH_CONFLICT: 'WORKER_AUTH_CONFLICT',
   WORKER_PONG: 'WORKER_PONG',
+  WORKER_TAB_NOT_FOUND: 'WORKER_TAB_NOT_FOUND',
 }
 
 // TypeScript 类型定义（编译后会被移除）
@@ -334,12 +335,13 @@ class WebSocketManager {
 
   /**
    * 更新标签页可见性
+   * @returns 是否成功更新（标签页存在则返回 true）
    */
-  updateTabVisibility(tabId: string, isVisible: boolean): void {
+  updateTabVisibility(tabId: string, isVisible: boolean): boolean {
     const tab = this.tabs.get(tabId)
     if (!tab) {
       console.warn(`[SharedWorker] 标签页不存在: ${tabId}`)
-      return
+      return false
     }
 
     tab.isVisible = isVisible
@@ -347,6 +349,7 @@ class WebSocketManager {
     console.log(`[SharedWorker] 标签页 ${tabId} 可见性更新: ${isVisible}`)
 
     this.checkAllTabsVisibility()
+    return true
   }
 
   /**
@@ -890,9 +893,19 @@ const wsManager = new WebSocketManager()
         wsManager.send((message.payload as SendPayload).data)
         break
 
-      case 'TAB_VISIBILITY':
-        wsManager.updateTabVisibility(message.tabId, (message.payload as VisibilityPayload).isVisible)
+      case 'TAB_VISIBILITY': {
+        const updated = wsManager.updateTabVisibility(message.tabId, (message.payload as VisibilityPayload).isVisible)
+        // 如果标签页不存在，通知标签页需要重新初始化
+        if (!updated) {
+          console.log(`[SharedWorker] 标签页 ${message.tabId} 不存在，发送 TAB_NOT_FOUND 通知`)
+          port.postMessage({
+            type: WorkerToTabMessageType.WORKER_TAB_NOT_FOUND,
+            payload: { tabId: message.tabId },
+            timestamp: Date.now(),
+          })
+        }
         break
+      }
 
       case 'TAB_REGISTER_CALLBACK':
         console.log(`[SharedWorker] 🔔 处理注册回调请求:`, message.payload)
