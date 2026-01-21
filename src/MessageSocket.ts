@@ -135,14 +135,14 @@ export class MessageSocket {
 
     if (!isVisible) {
       // 页面不可见时断开连接，避免多标签页重复连接
-      MessageSocket.logger.info('[MessageSocket1111111111111111111111] 页面不可见，断开连接')
+      MessageSocket.logger.info('[MessageSocket] 页面不可见，断开连接')
       if (MessageSocket.client) {
         MessageSocket.client.disconnect()
       }
     } else {
       // 页面可见时重新连接
       if (MessageSocket.currentUserId && MessageSocket.currentToken) {
-        MessageSocket.logger.info('[MessageSocket1111111111111111111111] 页面可见，尝试重新连接')
+        MessageSocket.logger.info('[MessageSocket] 页面可见，尝试重新连接')
         // 检查是否已经有活跃连接
         if (!MessageSocket.client || !MessageSocket.client.isConnected()) {
           MessageSocket.start({

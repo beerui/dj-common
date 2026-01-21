@@ -36,7 +36,9 @@
       "Bash(npm run lint:fix:*)",
       "Bash(pnpm unlink:*)",
       "Bash(pnpm link:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr edit:*)"
     ]
   }
 }
