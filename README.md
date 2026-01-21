@@ -88,6 +88,8 @@ npm run build
 
 使用 Claude Code 时只需发送 "帮我发布一个新版本" 即可自动完成发布流程。
 
+`chore: bump version to 1.0.2`
+
 ```bash
 # 自动版本管理和发布
 npm run release:patch  # 补丁版本 1.0.0 -> 1.0.1
