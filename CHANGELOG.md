@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.2](https://github.com/beerui/dj-common/releases/tag/v1.0.2) (2026-01-21)
+
+### Chore
+
+- **日志优化**: 移除调试过程中遗留的冗余日志输出
+  - 移除 MessageSocket 中的测试日志前缀 `1111111111111111111111`
+  - 移除 SharedWorkerManager 中的 console.log 调试语句
+  - 保持日志输出的整洁性和一致性
+
 ## [1.0.1](https://github.com/beerui/dj-common/releases/tag/v1.0.1) (2026-01-17)
 
 ### Bug Fixes

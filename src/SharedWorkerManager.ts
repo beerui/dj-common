@@ -464,7 +464,6 @@ export class SharedWorkerManager {
           const payload = message.payload as ServerMessagePayload
           // 用 console.log 确保即使 logLevel 较高也能看到
 
-          console.log('[SharedWorkerManager] 📨 收到服务器消息（经 Worker 转发）:', payload?.message)
           this.logger.info('[SharedWorkerManager] 📨 收到服务器消息（经 Worker 转发）', payload?.message)
           this.logger.debug('[SharedWorkerManager] 🧾 原始消息 data:', payload?.data)
         } catch (error) {
