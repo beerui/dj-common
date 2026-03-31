@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.0.3](https://github.com/beerui/dj-common/releases/tag/v1.0.3) (2026-03-31)
+
+### Features
+
+- **MessageCallbackEntry**: 新增 `skipHistoryMessage` 字段，支持跳过历史消息回放
+  - 在多标签页环境下，刷新页面时可选择不触发历史消息回调
+  - 仅接收实时推送的消息，避免重复处理
+  - 适用于不需要历史状态的实时通知场景
+
 ## [1.0.2](https://github.com/beerui/dj-common/releases/tag/v1.0.2) (2026-01-21)
 
 ### Chore
