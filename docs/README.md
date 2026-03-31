@@ -153,6 +153,10 @@ MessageSocket 支持三种连接模式：
 
 欢迎贡献代码！请查看项目根目录的 README.md 了解如何参与开发。
 
+## 如何发布代码
+
+运行命令 `brewer`正式、`beta`测试
+
 ## 许可证
 
 MIT © BeerUi
