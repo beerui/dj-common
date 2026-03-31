@@ -121,6 +121,8 @@ export interface RegisterCallbackPayload {
   type: string
   /** 回调ID（用于取消注册） */
   callbackId: string
+  /** 是否跳过历史消息回放 */
+  skipHistoryMessage?: boolean
 }
 
 /**
@@ -184,6 +186,8 @@ export interface TabInfo {
   registeredTypes: Set<string>
   /** 回调ID映射表（callbackId -> type） */
   callbackMap: Map<string, string>
+  /** 回调配置映射表（callbackId -> skipHistoryMessage） */
+  callbackConfigMap: Map<string, boolean>
 }
 
 /**

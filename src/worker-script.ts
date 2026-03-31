@@ -44,6 +44,8 @@ interface TabInfo {
   lastSeen: number
   registeredTypes: Set<string>
   callbackMap: Map<string, string>
+  /** 回调配置映射表（callbackId -> skipHistoryMessage） */
+  callbackConfigMap: Map<string, boolean>
 }
 
 interface InitPayload {
@@ -77,6 +79,7 @@ interface VisibilityPayload {
 interface RegisterCallbackPayload {
   type: string
   callbackId: string
+  skipHistoryMessage?: boolean
 }
 
 interface UnregisterCallbackPayload {
@@ -243,6 +246,7 @@ class WebSocketManager {
       lastSeen: Date.now(),
       registeredTypes: new Set(),
       callbackMap: new Map(),
+      callbackConfigMap: new Map(),
     }
 
     this.tabs.set(tabId, tabInfo)
@@ -684,14 +688,20 @@ class WebSocketManager {
     tab.lastSeen = Date.now()
     tab.registeredTypes.add(payload.type)
     tab.callbackMap.set(payload.callbackId, payload.type)
+    tab.callbackConfigMap.set(payload.callbackId, payload.skipHistoryMessage ?? false)
     console.log(`[SharedWorker] ✅ 标签页 ${tabId} 注册回调: ${payload.type} (${payload.callbackId})`)
     console.log(`[SharedWorker] 标签页 ${tabId} 当前注册的所有类型:`, Array.from(tab.registeredTypes))
 
     // 回放该类型的最后一条消息（如果有），确保新开标签页能立刻拿到最新数据
-    const cached = this.lastMessageByType.get(payload.type)
-    if (cached) {
-      console.log(`[SharedWorker] 🔁 回放缓存消息到标签页 ${tabId}, type: ${payload.type}`)
-      this.sendToTab(tab.port, WorkerToTabMessageType.WORKER_MESSAGE, cached)
+    // 但如果设置了 skipHistoryMessage，则跳过回放
+    if (!payload.skipHistoryMessage) {
+      const cached = this.lastMessageByType.get(payload.type)
+      if (cached) {
+        console.log(`[SharedWorker] 🔁 回放缓存消息到标签页 ${tabId}, type: ${payload.type}`)
+        this.sendToTab(tab.port, WorkerToTabMessageType.WORKER_MESSAGE, cached)
+      }
+    } else {
+      console.log(`[SharedWorker] ⏭️ 跳过历史消息回放 (skipHistoryMessage=true), type: ${payload.type}`)
     }
   }
 
@@ -711,6 +721,7 @@ class WebSocketManager {
       const type = tab.callbackMap.get(payload.callbackId)
       if (type) {
         tab.callbackMap.delete(payload.callbackId)
+        tab.callbackConfigMap.delete(payload.callbackId)
 
         // 检查是否还有其他回调注册了该类型
         const hasOtherCallbacks = Array.from(tab.callbackMap.values()).some((t) => t === type)
@@ -724,10 +735,11 @@ class WebSocketManager {
       // 移除该类型的所有回调
       tab.registeredTypes.delete(payload.type)
 
-      // 移除 callbackMap 中该类型的所有条目
+      // 移除 callbackMap 和 callbackConfigMap 中该类型的所有条目
       for (const [callbackId, type] of tab.callbackMap.entries()) {
         if (type === payload.type) {
           tab.callbackMap.delete(callbackId)
+          tab.callbackConfigMap.delete(callbackId)
         }
       }
 

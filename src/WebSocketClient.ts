@@ -51,6 +51,8 @@ export interface MessageCallbackEntry<T = unknown> {
   type: string
   /** 回调函数 */
   callback: MessageCallback<T>
+  /** 是否跳过历史消息回放（仅接收实时推送的消息），默认 false */
+  skipHistoryMessage?: boolean
 }
 
 /**

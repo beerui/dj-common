@@ -326,6 +326,7 @@ export class SharedWorkerManager {
       const payload: RegisterCallbackPayload = {
         type: entry.type,
         callbackId,
+        skipHistoryMessage: entry.skipHistoryMessage,
       }
       this.sendToWorker('TAB_REGISTER_CALLBACK' as TabToWorkerMessageType, payload)
       this.logger.debug(`[SharedWorkerManager] ✅ 已发送注册消息到 Worker: ${entry.type} (${callbackId})`)
